@@ -19,8 +19,9 @@ import argparse, json, os, sys, glob
 import numpy as np, rasterio
 from rasterio.warp import reproject, Resampling
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from depthwizard.pipeline import process
+from depthwizard.pipeline import process, _gcp_correction
 from depthwizard.dem import _mosaic, _cop30_url, _fabdem_url
+from depthwizard.calibrate import coarse_scale
 
 
 def onto(src_path, ref):
@@ -69,9 +70,22 @@ def main():
         datum = float(np.nanmedian((fab - L_dtm)[ground])) if ground.sum() > 100 else 0.0
         r = dict(terrain=site.get("terrain"), datum_offset_m=datum, relief_m=site.get("terrain_relief_m"),
                  lidar_ndsm_mean=float(np.nanmean(L_nd[footprint])), pipeline=rep)
+        # variant A: rescale nDSM so its 90 m block means match Copernicus - FABDEM (low-res DEM calibration)
+        cal = coarse_scale(nd, cop - fab, abs(ref.transform.a))
+        r["coarse_calibration"] = cal
+        ours_cal = dtm_used + (cal["scale"] if cal else 1.0) * nd
+        # variant B: 5 ground control points taken from LiDAR bare-ground pixels (terrain plane correction)
+        rng = np.random.RandomState(0); gi = np.flatnonzero(ground & footprint)
+        variants = [("ours", ours), ("ours_coarse_cal", ours_cal), ("fabdem_only", fab), ("copernicus_only", cop)]
+        if gi.size >= 5:
+            pick = rng.choice(gi, 5, replace=False); rr, cc = np.unravel_index(pick, L_dsm.shape)
+            xs = ref.transform.c + (cc + 0.5) * ref.transform.a; ys = ref.transform.f + (rr + 0.5) * ref.transform.e
+            corr, ginfo = _gcp_correction(ours, ref.transform, np.c_[xs, ys, L_dsm[rr, cc]])
+            r["gcp5"] = ginfo
+            if corr is not None:
+                variants.insert(2, ("ours_5gcp", ours + corr))
         for tag, off in (("raw", 0.0), ("datum_aligned", datum)):
-            r[tag] = {k: metrics(v - off, L_dsm, footprint) for k, v in
-                      (("ours", ours), ("fabdem_only", fab), ("copernicus_only", cop))}
+            r[tag] = {k: metrics(v - (0 if k == "ours_5gcp" else off), L_dsm, footprint) for k, v in variants}
         r["ndsm_vs_lidar"] = metrics(nd, L_nd, footprint & dtm_ok)
         r["ndsm_zero_baseline"] = metrics(np.zeros_like(nd), L_nd, footprint & dtm_ok)
         r["frac_px_excluded_bad_lidar_dtm"] = float(1 - (footprint & dtm_ok).sum() / footprint.sum())

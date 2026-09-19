@@ -59,3 +59,4 @@ details { margin: 6px 0; color: var(--muted); } details label { font-size: 12px;
 #empty > div { text-align: center; line-height: 1.7; } #empty b { font-size: 20px; color: var(--text); }
 
 [hidden] { display: none !important; }
+#stage.drop::after { content: "Drop image to process"; position: absolute; inset: 12px; border: 2px dashed var(--accent); border-radius: 12px; display: grid; place-items: center; font-size: 18px; color: var(--text); background: rgba(79,176,198,.12); pointer-events: none; }

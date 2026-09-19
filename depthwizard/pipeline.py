@@ -98,9 +98,19 @@ def process(image_path, out_dir, reference=None, dem=None, gcps=None, gsd=None, 
     progress("Reading image")
     with rasterio.open(image_path) as src:
         georef = src.crs is not None and not src.transform.is_identity
-        raw = src.read()
-        rgb = _to_uint8_rgb(raw, src)
         src_crs, src_tr = src.crs, src.transform
+        # never hold more than ~2x the working-grid pixels in memory: big scenes are read decimated
+        # (GDAL uses the file's overviews when present)
+        dec = max(1.0, np.sqrt(src.width * src.height / (2 * MAX_PIXELS)))
+        if dec > 1.0:
+            shape = (src.count, int(src.height / dec), int(src.width / dec))
+            raw = src.read(out_shape=shape, resampling=Resampling.average)
+            src_tr = src.transform * Affine.scale(src.width / shape[2], src.height / shape[1])
+            notes.append(f"large input ({src.width}×{src.height}) read at 1/{dec:.1f} resolution")
+        else:
+            raw = src.read()
+        rgb = _to_uint8_rgb(raw, src)
+        del raw
     H0, W0 = rgb.shape[:2]
 
     if georef:

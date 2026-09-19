@@ -335,8 +335,17 @@ async function refreshList(select) {
 }
 $("scene-select").onchange = (e) => e.target.value && openScene(e.target.value).catch(showErr);
 
-$("upload").onchange = async (e) => {
-  const f = e.target.files[0]; if (!f) return;
+// drag & drop an image anywhere on the 3D view
+const stage = $("stage");
+stage.addEventListener("dragover", (e) => { e.preventDefault(); stage.classList.add("drop"); });
+stage.addEventListener("dragleave", () => stage.classList.remove("drop"));
+stage.addEventListener("drop", (e) => {
+  e.preventDefault(); stage.classList.remove("drop");
+  const f = e.dataTransfer.files[0]; if (f) uploadFile(f);
+});
+$("upload").onchange = async (e) => { const f = e.target.files[0]; if (f) await uploadFile(f); e.target.value = ""; };
+async function uploadFile(f) {
+  if (!/\.(tiff?|png|jpe?g)$/i.test(f.name)) { status(`Unsupported file type: ${f.name}`, "err"); return; }
   const fd = new FormData(); fd.append("image", f);
   for (const [id, key] of [["upload-ref", "reference"], ["upload-dem", "dem"], ["upload-gcp", "gcps"]]) if ($(id).files[0]) fd.append(key, $(id).files[0]);
   if ($("upload-gsd").value) fd.append("gsd", $("upload-gsd").value);
@@ -352,8 +361,7 @@ $("upload").onchange = async (e) => {
       if (s.state === "error") throw new Error(s.message);
     }
   } catch (err) { showErr(err); }
-  e.target.value = "";
-};
+}
 function status(msg, cls = "") {
   const el = $("job-status"); el.textContent = msg; el.className = `status ${cls}`;
   const m = /tile (\d+)\/(\d+)/.exec(msg || ""), bar = $("job-bar");

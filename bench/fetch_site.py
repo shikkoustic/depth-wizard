@@ -59,8 +59,9 @@ def fit_bbox(bbox):
     x0, y0, x1, y1 = bbox; w, h = x1 - x0, y1 - y0; cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
     pt = [cx - 1e-4, cy - 1e-4, cx + 1e-4, cy + 1e-4]
     best = None
+    naips = search("naip", pt)
     for li in search("3dep-lidar-dsm", pt):
-        for ni in search("naip", pt):
+        for ni in naips:
             ix0, iy0 = max(li["bbox"][0], ni["bbox"][0]), max(li["bbox"][1], ni["bbox"][1])
             ix1, iy1 = min(li["bbox"][2], ni["bbox"][2]), min(li["bbox"][3], ni["bbox"][3])
             # small inset: item bboxes are footprints and the edges can hold nodata

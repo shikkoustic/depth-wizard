@@ -1,10 +1,11 @@
 """FastAPI app: serves the viewer, processed scenes, and the upload → job → scene API."""
-import json, os, shutil, threading, traceback, uuid
+import json, os, re, shutil, threading, traceback, uuid
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.gzip import GZipMiddleware
 
 STATIC = Path(__file__).parent / "static"
 
@@ -14,7 +15,9 @@ def create_app(data_dir):
     scenes_dir, uploads_dir = data_dir / "scenes", data_dir / "uploads"
     scenes_dir.mkdir(parents=True, exist_ok=True); uploads_dir.mkdir(parents=True, exist_ok=True)
     jobs = {}
+    run_lock = threading.Lock()  # one job at a time: bounded memory, others wait in the queue
     app = FastAPI(title="DepthWizard")
+    app.add_middleware(GZipMiddleware, minimum_size=4096, compresslevel=4)
 
     @app.get("/api/scenes")
     def list_scenes():
@@ -47,9 +50,16 @@ def create_app(data_dir):
         def run():
             from .pipeline import process  # imported lazily: pulls in torch
             job = jobs[jid]
+            if run_lock.locked():
+                job.update(message="Waiting for the previous job to finish")
+            with run_lock:
+                _run(job)
+
+        def _run(job):
+            from .pipeline import process
             try:
                 job.update(state="running")
-                out = scenes_dir / f"{title}-{jid}"
+                out = scenes_dir / f"{re.sub(r'[^A-Za-z0-9._-]+', '_', title)[:60]}-{jid}"
                 process(paths["image"], out, reference=paths.get("reference"), dem=paths.get("dem"),
                         gcps=paths.get("gcps"), gsd=gsd, title=title,
                         progress=lambda msg: job.update(message=msg))
