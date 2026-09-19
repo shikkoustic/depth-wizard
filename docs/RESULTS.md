@@ -8,9 +8,12 @@ Pixel-pooled metrics over the full GAMUS test split (0.66 m/px, heights in metre
 
 | Run | Backbone | Test tiles | RMSE | MAE | Bias | Corr | per-tile RMSE | best epoch |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ablation_plain | Small | 2861 | 3.98 | 1.70 | -0.25 | 0.844 | 2.92 | 11 |
 | base_main | Base | 2861 | 3.85 | 1.69 | 0.12 | 0.856 | 2.85 | 7 |
 | holdout_dc | Small | 361 | 6.87 | 4.13 | -2.63 | 0.759 | 6.09 | 9 |
+| mixed_small | Small | 2861 | 4.13 | 1.87 | 0.12 | 0.833 | 3.09 | 13 |
 | small_main | Small | 2861 | 4.07 | 1.79 | 0.03 | 0.837 | 3.00 | 10 |
+| small_tall | Small | 2861 | 4.08 | 1.85 | 0.13 | 0.838 | 3.07 | 13 |
 
 `holdout_dc` was trained **without any Washington DC tiles** and tested only on DC test tiles, so it measures transfer to an unseen city. Compare with the DC row of the per-city breakdown of the runs that saw DC in training. Baselines on the same DC tiles: predict 0 m RMSE 12.03 m, per-tile mean oracle RMSE 8.07 m.
 
@@ -20,7 +23,48 @@ Baselines on the same test tiles:
 | --- | --- | --- | --- | --- |
 | predict 0 m everywhere | 8.62 | 4.43 | — |  |
 | per-tile mean height (oracle) | 6.24 | 4.08 | — | uses the true mean of each tile |
-| zero-shot Depth Anything V2 Base + global affine | 7.29 | 4.79 | 0.276 | 800 tiles; affine fitted on train tiles |
+
+### ablation_plain: breakdown
+
+| Class | RMSE | MAE | Bias | pixels |
+| --- | --- | --- | --- | --- |
+| others | 2.48 | 1.22 | 0.23 | 40,610,782 |
+| ground | 2.48 | 0.57 | 0.03 | 133,496,964 |
+| low_veg | 1.95 | 0.66 | 0.29 | 143,540,386 |
+| building | 6.31 | 2.64 | -0.80 | 153,945,680 |
+| water | 2.34 | 1.13 | 0.86 | 15,571,908 |
+| road | 2.25 | 0.75 | -0.17 | 110,430,278 |
+| tree | 4.80 | 3.58 | -0.75 | 152,397,986 |
+
+| True height band | RMSE | MAE | Bias |
+| --- | --- | --- | --- |
+| 0-2m | 1.78 | 0.57 | 0.35 |
+| 2-5m | 3.23 | 2.37 | 0.20 |
+| 5-10m | 3.28 | 2.20 | -0.41 |
+| 10-20m | 5.19 | 3.99 | -1.64 |
+| 20-40m | 7.48 | 5.58 | -4.16 |
+| 40-infm | 43.59 | 29.37 | -29.15 |
+
+| City | pixels | RMSE | MAE | Corr |
+| --- | --- | --- | --- | --- |
+| DC | 94,633,984 | 4.31 | 2.56 | 0.896 |
+| NYC | 262,144,000 | 3.54 | 1.97 | 0.865 |
+| PHL | 393,216,000 | 4.17 | 1.31 | 0.800 |
+
+Test-time augmentation (200 test tiles): single pass RMSE 3.67 m → 8-view mean RMSE 3.59 m. Spearman correlation between the 8-view spread and the absolute error: 0.765.
+
+| spread decile (m) | MAE (m) | RMSE (m) |
+| --- | --- | --- |
+| 0.00–0.00 | — | — |
+| 0.00–0.00 | 0.24 | 1.05 |
+| 0.00–0.01 | 0.14 | 0.76 |
+| 0.01–0.05 | 0.34 | 1.15 |
+| 0.05–0.21 | 0.82 | 1.76 |
+| 0.21–0.41 | 1.43 | 2.29 |
+| 0.41–0.62 | 2.08 | 3.06 |
+| 0.62–0.87 | 2.70 | 3.82 |
+| 0.87–1.29 | 3.36 | 4.74 |
+| 1.29–16.89 | 5.24 | 8.35 |
 
 ### base_main: breakdown
 
@@ -104,6 +148,48 @@ Test-time augmentation (361 test tiles): single pass RMSE 6.87 m → 8-view mean
 | 1.05–1.47 | 7.36 | 9.74 |
 | 1.47–14.50 | 7.11 | 9.56 |
 
+### mixed_small: breakdown
+
+| Class | RMSE | MAE | Bias | pixels |
+| --- | --- | --- | --- | --- |
+| others | 2.93 | 1.54 | 0.69 | 40,610,782 |
+| ground | 2.78 | 0.73 | 0.22 | 133,496,964 |
+| low_veg | 2.37 | 0.88 | 0.55 | 143,540,386 |
+| building | 6.21 | 2.74 | -0.69 | 153,945,680 |
+| water | 2.55 | 1.24 | 0.98 | 15,571,908 |
+| road | 2.42 | 0.89 | 0.06 | 110,430,278 |
+| tree | 5.07 | 3.77 | 0.26 | 152,397,986 |
+
+| True height band | RMSE | MAE | Bias |
+| --- | --- | --- | --- |
+| 0-2m | 2.30 | 0.81 | 0.60 |
+| 2-5m | 3.71 | 2.63 | 0.73 |
+| 5-10m | 3.56 | 2.36 | -0.07 |
+| 10-20m | 5.24 | 4.10 | -0.84 |
+| 20-40m | 6.77 | 4.93 | -3.32 |
+| 40-infm | 42.21 | 28.01 | -27.71 |
+
+| City | pixels | RMSE | MAE | Corr |
+| --- | --- | --- | --- | --- |
+| DC | 94,633,984 | 4.53 | 2.75 | 0.885 |
+| NYC | 262,144,000 | 3.91 | 2.22 | 0.851 |
+| PHL | 393,216,000 | 4.17 | 1.42 | 0.797 |
+
+Test-time augmentation (800 test tiles): single pass RMSE 3.86 m → 8-view mean RMSE 3.76 m. Spearman correlation between the 8-view spread and the absolute error: 0.773.
+
+| spread decile (m) | MAE (m) | RMSE (m) |
+| --- | --- | --- |
+| 0.00–0.00 | — | — |
+| 0.00–0.00 | — | — |
+| 0.00–0.00 | — | — |
+| 0.00–0.12 | 0.28 | 1.07 |
+| 0.12–0.29 | 0.99 | 1.81 |
+| 0.29–0.47 | 1.69 | 2.65 |
+| 0.47–0.65 | 2.37 | 3.51 |
+| 0.65–0.89 | 2.97 | 4.24 |
+| 0.89–1.28 | 3.53 | 4.88 |
+| 1.28–16.30 | 5.38 | 8.52 |
+
 ### small_main: breakdown
 
 | Class | RMSE | MAE | Bias | pixels |
@@ -146,14 +232,47 @@ Test-time augmentation (800 test tiles): single pass RMSE 3.81 m → 8-view mean
 | 0.86–1.25 | 3.50 | 4.89 |
 | 1.25–13.90 | 5.52 | 8.74 |
 
-## 3. Held-out rural / forest / hilly regions (NAIP + 3DEP LiDAR)
+### small_tall: breakdown
 
-99 test tiles from whole LiDAR regions never used for training or model selection (region-level split of the NAIP+3DEP set built by `kaggle/naip_prep`; benchmark sites excluded). Reference = LiDAR top surface above ground. Predicting 0 m everywhere scores RMSE 8.56 m.
+| Class | RMSE | MAE | Bias | pixels |
+| --- | --- | --- | --- | --- |
+| others | 2.87 | 1.50 | 0.65 | 40,610,782 |
+| ground | 2.77 | 0.73 | 0.23 | 133,496,964 |
+| low_veg | 2.38 | 0.88 | 0.55 | 143,540,386 |
+| building | 6.06 | 2.68 | -0.66 | 153,945,680 |
+| water | 2.50 | 1.19 | 0.93 | 15,571,908 |
+| road | 2.39 | 0.87 | 0.04 | 110,430,278 |
+| tree | 5.07 | 3.76 | 0.28 | 152,397,986 |
 
-| Model | RMSE | MAE | Bias | Corr | RMSE on >20 m vegetation (bias) |
-| --- | --- | --- | --- | --- | --- |
-| base-main | 5.66 | 3.81 | -1.78 | 0.606 | 11.77 (-10.84) |
-| small-main | 6.14 | 4.06 | -1.82 | 0.529 | 11.47 (-10.76) |
+| True height band | RMSE | MAE | Bias |
+| --- | --- | --- | --- |
+| 0-2m | 2.32 | 0.80 | 0.59 |
+| 2-5m | 3.71 | 2.63 | 0.73 |
+| 5-10m | 3.53 | 2.32 | -0.09 |
+| 10-20m | 5.23 | 4.08 | -0.86 |
+| 20-40m | 6.73 | 4.89 | -3.14 |
+| 40-infm | 40.73 | 26.68 | -26.17 |
+
+| City | pixels | RMSE | MAE | Corr |
+| --- | --- | --- | --- | --- |
+| DC | 94,633,984 | 4.53 | 2.73 | 0.886 |
+| NYC | 262,144,000 | 3.89 | 2.20 | 0.852 |
+| PHL | 393,216,000 | 4.08 | 1.40 | 0.806 |
+
+Test-time augmentation (800 test tiles): single pass RMSE 3.83 m → 8-view mean RMSE 3.72 m. Spearman correlation between the 8-view spread and the absolute error: 0.773.
+
+| spread decile (m) | MAE (m) | RMSE (m) |
+| --- | --- | --- |
+| 0.00–0.00 | — | — |
+| 0.00–0.00 | — | — |
+| 0.00–0.00 | — | — |
+| 0.00–0.12 | 0.27 | 1.08 |
+| 0.12–0.28 | 0.97 | 1.77 |
+| 0.28–0.46 | 1.63 | 2.55 |
+| 0.46–0.65 | 2.35 | 3.48 |
+| 0.65–0.89 | 2.96 | 4.23 |
+| 0.89–1.29 | 3.50 | 4.85 |
+| 1.29–16.19 | 5.35 | 8.42 |
 
 ## 2. Full pipeline (absolute DSM) vs USGS 3DEP LiDAR
 
@@ -185,3 +304,13 @@ Sites excluded automatically because the reference LiDAR itself failed a consist
 - `boulder_foothills` (hilly): LiDAR bare earth differs from FABDEM by 1936 m (mislabelled elevations)
 
 MAE and correlation per site and method are in `runs/bench/bench_results.json`.
+
+## 3. Held-out rural / forest / hilly regions (NAIP + 3DEP LiDAR)
+
+99 test tiles from whole LiDAR regions never used for training or model selection (region-level split of the NAIP+3DEP set built by `kaggle/naip_prep`; benchmark sites excluded). Reference = LiDAR top surface above ground. Predicting 0 m everywhere scores RMSE 8.56 m.
+
+| Model | RMSE | MAE | Bias | Corr | RMSE on >20 m vegetation (bias) |
+| --- | --- | --- | --- | --- | --- |
+| base-main | 5.66 | 3.81 | -1.78 | 0.606 | 11.77 (-10.84) |
+| small-main | 6.14 | 4.06 | -1.82 | 0.529 | 11.47 (-10.76) |
+| mixed_small (trained with rural set) | 5.85 | 3.11 | 1.30 | 0.691 | 4.36 (-2.84) |
