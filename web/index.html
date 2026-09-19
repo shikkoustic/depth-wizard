@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DepthWizard</title>
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <aside id="panel">
+      <header>
+        <h1>DepthWizard</h1>
+        <p class="sub">Single-view satellite image → DSM → 3D flythrough</p>
+      </header>
+
+      <section id="sec-input">
+        <h2>Scene</h2>
+        <select id="scene-select"><option value="">— choose a processed scene —</option></select>
+        <label class="upload">
+          <input type="file" id="upload" accept=".tif,.tiff,.png,.jpg,.jpeg" />
+          <span>Upload image (GeoTIFF / PNG / JPG)</span>
+        </label>
+        <details id="upload-opts">
+          <summary>Upload options</summary>
+          <label>Reference DSM (optional GeoTIFF) <input type="file" id="upload-ref" accept=".tif,.tiff" /></label>
+          <label>Terrain DEM override (optional GeoTIFF) <input type="file" id="upload-dem" accept=".tif,.tiff" /></label>
+          <label>Ground-control points CSV (x,y,z in image CRS) <input type="file" id="upload-gcp" accept=".csv" /></label>
+          <label>Pixel size, metres (PNG/JPG only) <input type="number" id="upload-gsd" step="0.05" placeholder="auto" /></label>
+        </details>
+        <div id="job-status" class="status"></div>
+        <div id="scene-info" class="info"></div>
+      </section>
+
+      <section id="sec-view">
+        <h2>View</h2>
+        <div class="seg" id="nav-mode">
+          <button data-v="orbit" class="on">Orbit</button><button data-v="fly">Fly</button><button data-v="tour">Tour</button>
+        </div>
+        <label>Surface <select id="surface"></select></label>
+        <label>Overlay
+          <select id="overlay">
+            <option value="">Photo only</option>
+            <option value="height">Height</option>
+            <option value="slope">Slope (°)</option>
+            <option value="diff">Error vs reference</option>
+            <option value="conf">Uncertainty (± m)</option>
+          </select>
+        </label>
+        <div id="legend"><div class="bar"></div><div class="ticks"><span></span><span></span><span></span></div></div>
+        <label>Overlay opacity <input type="range" id="opacity" min="0" max="1" step="0.05" value="0.75" /></label>
+        <label>Vertical exaggeration <span id="exag-v">1.0×</span><input type="range" id="exag" min="0.5" max="5" step="0.1" value="1" /></label>
+        <label class="chk"><input type="checkbox" id="shade" checked /> Hill-shading</label>
+        <label class="chk"><input type="checkbox" id="walls" checked /> Grey walls on steep faces</label>
+        <label class="chk"><input type="checkbox" id="contours" /> Contours every <input type="number" id="contour-step" value="5" min="0.5" step="0.5" /> m</label>
+        <label class="chk"><input type="checkbox" id="swipe" /> Swipe: prediction | reference</label>
+      </section>
+
+      <section id="sec-tools">
+        <h2>Measure</h2>
+        <div class="seg" id="tool">
+          <button data-v="probe" class="on">Probe</button><button data-v="profile">Profile</button>
+        </div>
+        <div id="probe" class="info">Click the terrain to read height and slope.</div>
+        <canvas id="profile-chart" width="300" height="150" hidden></canvas>
+      </section>
+
+      <section id="sec-accuracy" hidden>
+        <h2>Accuracy vs reference</h2>
+        <div id="acc" class="info"></div>
+      </section>
+
+      <section id="sec-export">
+        <h2>Download</h2>
+        <div id="downloads" class="info">—</div>
+      </section>
+    </aside>
+
+    <main id="stage">
+      <canvas id="gl"></canvas>
+      <div id="swipe-handle" hidden></div>
+      <div id="hud"></div>
+      <div id="help">Orbit: left-drag pan · right-drag rotate · wheel zoom &nbsp;|&nbsp; Fly: click to capture mouse · WASD move · Q/E down/up · Shift fast · Esc release</div>
+      <div id="empty">Choose a scene or upload an image to begin.</div>
+    </main>
+  </div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
