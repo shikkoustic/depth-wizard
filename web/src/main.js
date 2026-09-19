@@ -70,7 +70,14 @@ async function openScene(url) {
       `<tr><td>Bias (pred − ref)</td><td>${fmt(acc.bias, 2)} m</td></tr><tr><td>Correlation</td><td>${fmt(acc.corr, 3)}</td></tr>` +
       `<tr><td>Pixels compared</td><td>${acc.n.toLocaleString()}</td></tr></table>`;
   }
-  if (acc) drawHistogram(S.derived.diff);
+  if (acc && acc.rmse < 1e-6) {
+    $("acc").innerHTML = "<b>Prediction and reference are identical in this scene</b> — nothing to compare. " +
+      "Load a scene processed from an image (with a reference DSM) to see accuracy.";
+    $("err-hist").hidden = true; $("err-hist").nextElementSibling.hidden = true;
+  } else if (acc) {
+    $("err-hist").hidden = false; $("err-hist").nextElementSibling.hidden = false;
+    drawHistogram(S.derived.diff);
+  }
   $("downloads").innerHTML = (meta.downloads || []).map((d) => `<a href="${url}/${d.file}" download>${d.label}</a>`).join("") || "—";
 
   applySurface(); applyOverlay(); applyStyle(); homeView();

@@ -21,14 +21,14 @@ with rasterio.open(f"{a.site}/naip.tif") as s:
 w, h = int((r - l) // a.res), int((t - b) // a.res)
 tr = rasterio.transform.from_origin(l, t, a.res, a.res)
 ref = read_onto_grid(f"{a.site}/lidar_dsm.tif", tr, crs, (h, w))
-layers = {"ref": ref}
-if a.pred:
-    layers["dsm"] = read_onto_grid(a.pred, tr, crs, (h, w))
-else:
-    layers["dsm"] = ref
+if a.pred:  # prediction vs LiDAR
+    layers = {"dsm": read_onto_grid(a.pred, tr, crs, (h, w)), "ref": ref}
+else:       # LiDAR only: shown as the surface itself, no accuracy comparison
+    layers = {"dsm": ref}
 # texture must cover exactly the grid extent: crop NAIP to w*res x h*res metres
 px = s_res = rasterio.open(f"{a.site}/naip.tif").res[0]
 rgb = rgb[: round(h * a.res / px), : round(w * a.res / px)]
-m = write_scene(a.out, rgb, layers, (a.res, a.res), crs=crs, transform=tr, title=os.path.basename(a.site),
-                notes=["reference = USGS 3DEP LiDAR DSM (NAVD88)"])
+title = os.path.basename(a.site) + ("" if a.pred else " — LiDAR DSM (ground truth, no prediction)")
+notes = ["reference = USGS 3DEP LiDAR DSM (NAVD88)"] if a.pred else ["surface = USGS 3DEP LiDAR DSM (NAVD88); this scene shows measured data, not a prediction"]
+m = write_scene(a.out, rgb, layers, (a.res, a.res), crs=crs, transform=tr, title=title, notes=notes)
 print(m["width"], m["height"], {k: v["stats"] for k, v in m["layers"].items()})
