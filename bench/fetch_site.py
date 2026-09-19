@@ -122,13 +122,39 @@ def main():
             same = [i for i in items if i["id"] == dsm_id.replace("-dsm-", f"-{kind}-")]
             items = same or items
         if not items:
-            raise SystemExit(f"no single {col} item covers this bbox; shrink or move it")
-        it = items[0]
+            if kind == "dsm":
+                raise SystemExit(f"no single {col} item covers this bbox; shrink or move it")
+            continue
+        last = None
+        for it in items:  # some catalogue footprints are wrong: try candidates until one really covers the box
+            try:
+                info = crop(it["assets"]["data"]["href"], col, a.bbox, f"{out}/lidar_{kind}.tif")
+                break
+            except (SystemExit, rasterio.errors.WindowError, rasterio.errors.RasterioIOError) as e:
+                last = e
+        else:
+            if kind == "dsm":
+                raise SystemExit(f"{col}: no candidate item covers the bbox ({last})")
+            print(f"warning: {col} unavailable here ({last}); will derive it", flush=True)
+            continue
         if kind == "dsm":
             dsm_id = it["id"]
-        meta["layers"][f"lidar_{kind}"] = dict(item=it["id"], date=it["properties"].get("datetime") or it["properties"].get("start_datetime"),
-                                               **crop(it["assets"]["data"]["href"], col, a.bbox, f"{out}/lidar_{kind}.tif"))
+        meta["layers"][f"lidar_{kind}"] = dict(item=it["id"], date=it["properties"].get("datetime") or it["properties"].get("start_datetime"), **info)
 
+    # DTM and HAG are redundant given the DSM (HAG = DSM - DTM): derive whichever one is missing
+    have = {k: os.path.exists(f"{out}/lidar_{k}.tif") for k in ("dtm", "hag")}
+    if not all(have.values()):
+        if not any(have.values()):
+            raise SystemExit("neither LiDAR DTM nor HAG covers this bbox")
+        src_k, dst_k = ("hag", "dtm") if have["hag"] else ("dtm", "hag")
+        with rasterio.open(f"{out}/lidar_dsm.tif") as d, rasterio.open(f"{out}/lidar_{src_k}.tif") as o:
+            if d.shape != o.shape or d.transform != o.transform:
+                raise SystemExit(f"cannot derive {dst_k}: DSM and {src_k} grids differ")
+            a, b = d.read(1, masked=True).astype("float32"), o.read(1, masked=True).astype("float32")
+            prof = d.profile
+            with rasterio.open(f"{out}/lidar_{dst_k}.tif", "w", **prof) as w:
+                w.write((a - b).filled(d.nodata if d.nodata is not None else -9999), 1)
+        meta["layers"][f"lidar_{dst_k}"] = dict(derived=f"lidar_dsm - lidar_{src_k}")
     with rasterio.open(f"{out}/lidar_hag.tif") as s:
         h = s.read(1, masked=True).astype(np.float32)
         meta["hag_stats"] = dict(mean=float(h.mean()), p95=float(np.percentile(h.compressed(), 95)), max=float(h.max()))
