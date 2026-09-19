@@ -29,6 +29,7 @@
           <label>Pixel size, metres (PNG/JPG only) <input type="number" id="upload-gsd" step="0.05" placeholder="auto" /></label>
         </details>
         <div id="job-status" class="status"></div>
+        <div id="job-bar" hidden><div></div></div>
         <div id="scene-info" class="info"></div>
       </section>
 
@@ -68,6 +69,8 @@
       <section id="sec-accuracy" hidden>
         <h2>Accuracy vs reference</h2>
         <div id="acc" class="info"></div>
+        <canvas id="err-hist" width="300" height="110"></canvas>
+        <div class="info">Error histogram (prediction − reference, m)</div>
       </section>
 
       <section id="sec-export">
@@ -80,8 +83,32 @@
       <canvas id="gl"></canvas>
       <div id="swipe-handle" hidden></div>
       <div id="hud"></div>
-      <div id="help">Orbit: left-drag pan · right-drag rotate · wheel zoom &nbsp;|&nbsp; Fly: click to capture mouse · WASD move · Q/E down/up · Shift fast · Esc release</div>
-      <div id="empty">Choose a scene or upload an image to begin.</div>
+      <div id="toolbar">
+        <button id="btn-home" title="Reset view (H)">⌂</button>
+        <button id="btn-shot" title="Save screenshot (P)">PNG</button>
+        <button id="btn-rec" title="Record flythrough video (R)">● REC</button>
+        <button id="btn-glb" title="Export textured 3D model (.glb)">⬇ 3D</button>
+        <button id="btn-help" title="Keyboard shortcuts (?)">?</button>
+      </div>
+      <div id="compass" title="North"><svg viewBox="-20 -20 40 40"><circle r="18" /><path d="M0,-15 L5,2 L0,-2 L-5,2 Z" class="n"/><path d="M0,15 L5,-2 L0,2 L-5,-2 Z" class="s"/><text y="-7" dy="-9">N</text></svg></div>
+      <div id="scalebar"><div class="bar"></div><span></span></div>
+      <div id="cursor-read"></div>
+      <div id="shortcuts" hidden>
+        <h3>Keyboard &amp; mouse</h3>
+        <table>
+          <tr><td>Orbit</td><td>left-drag pan · right-drag rotate · wheel zoom</td></tr>
+          <tr><td>Fly</td><td>click to capture mouse · W A S D move · Q / E down / up · Shift fast · Esc release</td></tr>
+          <tr><td>1 / 2 / 3</td><td>Orbit / Fly / Tour</td></tr>
+          <tr><td>H</td><td>reset view</td></tr>
+          <tr><td>O</td><td>cycle overlays</td></tr>
+          <tr><td>+ / −</td><td>vertical exaggeration</td></tr>
+          <tr><td>P / R</td><td>screenshot / start–stop recording</td></tr>
+          <tr><td>?</td><td>this help</td></tr>
+        </table>
+        <p>Click the terrain to read height, slope and coordinates. Profile tool: click two points.</p>
+      </div>
+      <div id="help">Orbit: left-drag pan · right-drag rotate · wheel zoom &nbsp;|&nbsp; Fly: click to capture mouse · WASD · Q/E · Shift &nbsp;|&nbsp; ? shortcuts</div>
+      <div id="empty"><div><b>DepthWizard</b><br>Choose a processed scene on the left, or upload a satellite image<br>(GeoTIFF → absolute DSM · PNG/JPG → relative DSM).</div></div>
     </main>
   </div>
   <script type="module" src="./src/main.js"></script>

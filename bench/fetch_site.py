@@ -14,6 +14,7 @@ Example:
   python bench/fetch_site.py --name smoky_forest --bbox -83.52 35.60 -83.50 35.62
 """
 import argparse, json, os, urllib.request
+os.environ.setdefault("GDAL_HTTP_TIMEOUT", "60"); os.environ.setdefault("GDAL_HTTP_MAX_RETRY", "4"); os.environ.setdefault("GDAL_HTTP_RETRY_DELAY", "2")
 import numpy as np
 import rasterio
 from rasterio.windows import from_bounds
@@ -47,6 +48,29 @@ def covering(items, bbox):
     return sorted(full, key=lambda f: f["properties"].get("datetime") or f["properties"].get("start_datetime") or "", reverse=True)
 
 
+def fit_bbox(bbox):
+    """Shift bbox (keeping its size) so that one NAIP item and one 3DEP item both contain it.
+    Tiles are a few km across, so a ~1 km box near a tile edge only needs a small shift."""
+    x0, y0, x1, y1 = bbox; w, h = x1 - x0, y1 - y0; cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    pt = [cx - 1e-4, cy - 1e-4, cx + 1e-4, cy + 1e-4]
+    best = None
+    for li in search("3dep-lidar-dsm", pt):
+        for ni in search("naip", pt):
+            ix0, iy0 = max(li["bbox"][0], ni["bbox"][0]), max(li["bbox"][1], ni["bbox"][1])
+            ix1, iy1 = min(li["bbox"][2], ni["bbox"][2]), min(li["bbox"][3], ni["bbox"][3])
+            # small inset: item bboxes are footprints and the edges can hold nodata
+            ix0, iy0, ix1, iy1 = ix0 + 0.002, iy0 + 0.002, ix1 - 0.002, iy1 - 0.002
+            if ix1 - ix0 < w or iy1 - iy0 < h:
+                continue
+            nx0 = min(max(x0, ix0), ix1 - w); ny0 = min(max(y0, iy0), iy1 - h)
+            shift = abs(nx0 - x0) + abs(ny0 - y0)
+            if best is None or shift < best[0]:
+                best = (shift, [round(nx0, 6), round(ny0, 6), round(nx0 + w, 6), round(ny0 + h, 6)])
+    if best is None:
+        raise SystemExit("no NAIP/3DEP item pair can contain this bbox")
+    return best[1]
+
+
 def crop(href, collection, bbox, out_path, bands=None):
     with rasterio.open(sign(href, collection)) as src:
         b = transform_bounds("EPSG:4326", src.crs, *bbox, densify_pts=21)
@@ -72,6 +96,8 @@ def main():
     out = os.path.join(a.out, a.name); os.makedirs(out, exist_ok=True)
     meta = {"name": a.name, "bbox": a.bbox, "terrain": a.terrain, "layers": {}}
 
+    a.bbox = fit_bbox(a.bbox)
+    meta["bbox"] = a.bbox
     naip = covering(search("naip", a.bbox), a.bbox)
     if not naip:
         raise SystemExit("no single NAIP item covers this bbox; shrink or move it")

@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { MapControls } from "three/addons/controls/MapControls.js";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
+import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
 import { loadScene, buildTerrain, setOverlay, slopeDegrees, difference, robustRange, compareStats } from "./terrain.js";
 import { rampCSS } from "./colormaps.js";
 
@@ -44,9 +45,12 @@ async function openScene(url) {
   S.base = robustRange(layers.dsm, 0.01, 0.99)[0];
 
   const shared = {};
-  const surfaces = [["dsm", "Prediction (DSM)"], ["ref", "Reference DSM"], ["dtm", "Terrain only (DTM)"]].filter(([k]) => layers[k]);
+  const surfaces = [["dsm", "Prediction (DSM)"], ["ref", "Reference DSM"], ["ndsm", "Height above ground only (nDSM)"], ["dtm", "Terrain only (DTM)"]]
+    .filter(([k]) => layers[k] && !(k === "ndsm" && meta.height_kind === "relative"));
   for (const [k] of surfaces) {
-    S.meshes[k] = buildTerrain(data, layers[k], { photo: data.photo, base: S.base, shared });
+    const base = k === "ndsm" ? 0 : S.base; // nDSM starts at 0 m; the others share the DSM's floor
+    S.meshes[k] = buildTerrain(data, layers[k], { photo: data.photo, base, shared });
+    S.meshes[k].userData.base = base;
     scene3.add(S.meshes[k]);
   }
   $("surface").innerHTML = surfaces.map(([k, t]) => `<option value="${k}">${t}</option>`).join("");
@@ -71,6 +75,7 @@ async function openScene(url) {
       `<tr><td>Bias (pred − ref)</td><td>${fmt(acc.bias, 2)} m</td></tr><tr><td>Correlation</td><td>${fmt(acc.corr, 3)}</td></tr>` +
       `<tr><td>Pixels compared</td><td>${acc.n.toLocaleString()}</td></tr></table>`;
   }
+  if (acc) drawHistogram(S.derived.diff);
   $("downloads").innerHTML = (meta.downloads || []).map((d) => `<a href="${url}/${d.file}" download>${d.label}</a>`).join("") || "—";
 
   applySurface(); applyOverlay(); applyStyle(); homeView();
@@ -87,8 +92,8 @@ function pixelAt(x, z) {
 }
 function surfaceHeightAt(x, z) { // world y of the current surface (with exaggeration)
   const p = S.data && pixelAt(x, z); if (!p) return 0;
-  const h = S.data.layers[S.surface][p.i];
-  return Number.isFinite(h) ? (h - S.base) * S.exag : 0;
+  const h = S.data.layers[S.surface][p.i], base = S.meshes[S.surface]?.userData.base ?? S.base;
+  return Number.isFinite(h) ? (h - base) * S.exag : 0;
 }
 
 // ---------------- UI wiring ----------------
@@ -168,7 +173,21 @@ canvas.addEventListener("click", (e) => {
 let downAt = null;
 canvas.addEventListener("pointerdown", (e) => { downAt = [e.clientX, e.clientY]; S.dragged = false; });
 canvas.addEventListener("pointermove", (e) => { if (downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) S.dragged = true; });
-window.addEventListener("keydown", (e) => { S.keys[e.code] = true; if (e.code === "KeyH" && S.data) homeView(); });
+window.addEventListener("keydown", (e) => {
+  S.keys[e.code] = true;
+  if (e.target.closest("input, select, textarea")) return;
+  const k = e.key;
+  if (k === "?") { $("shortcuts").hidden = !$("shortcuts").hidden; return; }
+  if (k === "Escape") $("shortcuts").hidden = true;
+  if (!S.data) return;
+  if (k === "h" || k === "H") homeView();
+  if (k === "1" || k === "2" || k === "3") $("nav-mode").children[+k - 1].click();
+  if (k === "o" || k === "O") { const o = $("overlay"), opts = [...o.options].filter((x) => !x.disabled); o.value = opts[(opts.findIndex((x) => x.value === o.value) + 1) % opts.length].value; o.onchange({ target: o }); }
+  if (k === "+" || k === "=") { $("exag").value = Math.min(5, S.exag + 0.5); $("exag").oninput({ target: $("exag") }); }
+  if (k === "-" || k === "_") { $("exag").value = Math.max(0.5, S.exag - 0.5); $("exag").oninput({ target: $("exag") }); }
+  if (k === "p" || k === "P") screenshot();
+  if (k === "r" || k === "R") toggleRecord();
+});
 window.addEventListener("keyup", (e) => { S.keys[e.code] = false; });
 
 function updateFly(dt) {
@@ -279,6 +298,7 @@ function frame() {
     if (S.nav === "orbit") orbit.update(); else if (S.nav === "fly") updateFly(dt); else updateTour(dt);
     const p = camera.position;
     $("hud").textContent = `camera ${fmt(p.y / S.exag + S.base, 0)} m · ground ${fmt(surfaceHeightAt(p.x, p.z) / S.exag + S.base, 0)} m`;
+    updateCompassAndScale();
   }
   const size = renderer.getSize(new THREE.Vector2());
   if (S.swipe && S.meshes.ref) {
@@ -327,9 +347,94 @@ $("upload").onchange = async (e) => {
   } catch (err) { showErr(err); }
   e.target.value = "";
 };
-function status(msg, cls = "") { const el = $("job-status"); el.textContent = msg; el.className = `status ${cls}`; }
+function status(msg, cls = "") {
+  const el = $("job-status"); el.textContent = msg; el.className = `status ${cls}`;
+  const m = /tile (\d+)\/(\d+)/.exec(msg || ""), bar = $("job-bar");
+  bar.hidden = !(m || /Reading|Resampling|Loading|Fetching|Writing|Building|Uploading/.test(msg || ""));
+  const stage = { Uploading: 3, Reading: 6, Resampling: 10, Loading: 14, Fetching: 88, Aligning: 92, Writing: 95, Building: 98 };
+  const pct = m ? 15 + (70 * +m[1]) / +m[2] : (stage[Object.keys(stage).find((k) => (msg || "").startsWith(k))] ?? 0);
+  bar.firstChild.style.width = `${pct}%`;
+  if (cls) bar.hidden = true;
+}
 function showErr(err) { console.error(err); status(String(err.message || err), "err"); $("empty").hidden = !!S.data; }
 
 // open ?scene=... directly (also used for static demos)
 const q = new URLSearchParams(location.search).get("scene");
 refreshList(q || undefined).then(() => q && openScene(q).catch(showErr));
+
+
+// ---------------- compass, scale bar, cursor readout ----------------
+function updateCompassAndScale() {
+  const d = new THREE.Vector3(); camera.getWorldDirection(d);
+  const az = Math.atan2(d.x, -d.z); // 0 when looking north (-z)
+  $("compass").firstChild.style.transform = `rotate(${-az}rad)`;
+  // metres per screen pixel at the orbit target / look point
+  const dist = S.nav === "orbit" ? camera.position.distanceTo(orbit.target) : Math.max(10, camera.position.y - surfaceHeightAt(camera.position.x, camera.position.z));
+  const h = renderer.getSize(new THREE.Vector2()).y;
+  const mpp = (2 * dist * Math.tan((camera.fov * Math.PI) / 360)) / h;
+  const target = 110 * mpp, pow = 10 ** Math.floor(Math.log10(target));
+  const nice = [1, 2, 5, 10].map((m) => m * pow).filter((v) => v <= target).pop() || pow;
+  $("scalebar").querySelector(".bar").style.width = `${nice / mpp}px`;
+  $("scalebar").querySelector("span").textContent = nice >= 1000 ? `${nice / 1000} km` : `${nice} m`;
+}
+
+let hoverPending = null;
+canvas.addEventListener("pointermove", (e) => {
+  if (!S.data || S.nav !== "orbit" || e.buttons) { $("cursor-read").style.display = "none"; return; }
+  if (hoverPending) return;
+  hoverPending = requestAnimationFrame(() => {
+    hoverPending = null;
+    const rect = canvas.getBoundingClientRect();
+    ray.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), camera);
+    const hit = ray.intersectObjects(Object.values(S.meshes).filter((m) => m.visible), false)[0];
+    const p = hit && pixelAt(hit.point.x, hit.point.z), el = $("cursor-read");
+    if (!p) { el.style.display = "none"; return; }
+    const L = S.data.layers, rel = S.data.meta.height_kind === "relative";
+    el.textContent = `${rel ? "h" : "DSM"} ${fmt(L.dsm[p.i])} m` + (L.ndsm && !rel ? ` · above ground ${fmt(L.ndsm[p.i])} m` : "") +
+      (L.ref ? ` · ref ${fmt(L.ref[p.i])} m` : "") + ` · slope ${fmt(S.derived.slope[p.i], 0)}°`;
+    el.style.display = "block";
+    const x = e.clientX - rect.left, flip = x + el.offsetWidth + 24 > rect.width;
+    el.style.left = `${flip ? x - el.offsetWidth - 24 : x}px`; el.style.top = `${e.clientY - rect.top}px`;
+  });
+});
+canvas.addEventListener("pointerleave", () => { $("cursor-read").style.display = "none"; });
+
+// ---------------- error histogram ----------------
+function drawHistogram(diff) {
+  const cv = $("err-hist"), g = cv.getContext("2d"), [lo, hi] = robustRange(diff, 0.01, 0.99, true), n = 41, bins = new Array(n).fill(0);
+  let tot = 0;
+  for (let i = 0; i < diff.length; i += 3) { const v = diff[i]; if (!Number.isFinite(v)) continue; bins[Math.min(n - 1, Math.max(0, Math.floor(((v - lo) / (hi - lo)) * n)))]++; tot++; }
+  const mx = Math.max(...bins), W = cv.width, H = cv.height;
+  g.clearRect(0, 0, W, H);
+  bins.forEach((b, i) => { const x = (i / n) * W, bh = (b / mx) * (H - 18); g.fillStyle = i === (n - 1) / 2 ? "#e6e9ee" : "#4fb0c6"; g.fillRect(x + 1, H - 14 - bh, W / n - 2, bh); });
+  g.fillStyle = "#8b95a3"; g.font = "10px system-ui";
+  g.fillText(`${lo.toFixed(1)}`, 2, H - 2); g.fillText("0", W / 2 - 3, H - 2); g.fillText(`+${hi.toFixed(1)}`, W - 28, H - 2);
+}
+
+// ---------------- screenshot / recording / GLB export ----------------
+function download(blob, name) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
+function sceneName() { return (S.data?.meta.title || "depthwizard").replace(/[^\w.-]+/g, "_"); }
+function screenshot() { renderer.render(scene3, camera); canvas.toBlob((b) => download(b, `${sceneName()}.png`)); }
+let recorder = null;
+function toggleRecord() {
+  if (recorder) { recorder.stop(); return; }
+  const chunks = [], mime = ["video/webm;codecs=vp9", "video/webm", "video/mp4"].find((m) => MediaRecorder.isTypeSupported(m));
+  recorder = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 8e6 });
+  recorder.ondataavailable = (e) => chunks.push(e.data);
+  recorder.onstop = () => { download(new Blob(chunks, { type: mime }), `${sceneName()}_flythrough.${mime.includes("mp4") ? "mp4" : "webm"}`); recorder = null; $("btn-rec").classList.remove("rec"); $("btn-rec").textContent = "● REC"; };
+  recorder.start(); $("btn-rec").classList.add("rec"); $("btn-rec").textContent = "■ STOP";
+}
+function exportGLB() {
+  const src = S.meshes[S.surface] || S.meshes.dsm; if (!src) return;
+  const geo = src.geometry.clone(); geo.scale(1, S.exag, 1);
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: S.data.photo, roughness: 1 }));
+  mesh.name = sceneName();
+  new GLTFExporter().parse(mesh, (glb) => download(new Blob([glb], { type: "model/gltf-binary" }), `${sceneName()}.glb`),
+    (err) => showErr(err), { binary: true, maxTextureSize: 4096 });
+}
+$("btn-home").onclick = () => S.data && homeView();
+$("btn-shot").onclick = () => S.data && screenshot();
+$("btn-rec").onclick = () => S.data && toggleRecord();
+$("btn-glb").onclick = () => S.data && exportGLB();
+$("btn-help").onclick = () => { $("shortcuts").hidden = !$("shortcuts").hidden; };
+$("shortcuts").onclick = () => { $("shortcuts").hidden = true; };

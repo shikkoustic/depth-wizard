@@ -1,4 +1,7 @@
 """Georeferencing helpers: grid definition, resampling onto a grid, GeoTIFF writing."""
+import os
+for _k, _v in (("GDAL_HTTP_TIMEOUT", "60"), ("GDAL_HTTP_MAX_RETRY", "4"), ("GDAL_HTTP_RETRY_DELAY", "2"), ("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR")):
+    os.environ.setdefault(_k, _v)
 import numpy as np
 import rasterio
 from rasterio.crs import CRS
