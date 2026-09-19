@@ -335,9 +335,14 @@ frame();
 async function refreshList(select) {
   try {
     const list = await (await fetch("./api/scenes")).json();
+    const groups = {};
+    for (const s of list) (groups[s.group || "Scenes"] ||= []).push(s);
+    const order = ["Your uploads", "India demos (Sentinel-2)", "LiDAR benchmark (USGS 3DEP)", "GAMUS test tiles", "LiDAR reference only"];
+    const names = Object.keys(groups).sort((a, b) => (order.indexOf(a) + 99) % 99 - (order.indexOf(b) + 99) % 99);
     $("scene-select").innerHTML = `<option value="">— choose a processed scene —</option>` +
-      list.map((s) => `<option value="${s.url}">${s.title}</option>`).join("");
+      names.map((g) => `<optgroup label="${g}">` + groups[g].map((s) => `<option value="${s.url}">${s.title}</option>`).join("") + `</optgroup>`).join("");
     if (select) $("scene-select").value = select;
+    return list;
   } catch { /* static hosting without API */ }
 }
 $("scene-select").onchange = (e) => e.target.value && openScene(e.target.value).catch(showErr);
@@ -381,8 +386,12 @@ function status(msg, cls = "") {
 function showErr(err) { console.error(err); status(String(err.message || err), "err"); $("empty").hidden = !!S.data; }
 
 // open ?scene=... directly (also used for static demos)
+// open ?scene=... directly; otherwise start in a demo scene so first-time visitors see something at once
 const q = new URLSearchParams(location.search).get("scene");
-refreshList(q || undefined).then(() => q && openScene(q).catch(showErr));
+refreshList(q || undefined).then((list) => {
+  const start = q || (list || []).find((s) => s.group?.startsWith("India"))?.url || (list || [])[0]?.url;
+  if (start) { $("scene-select").value = start; openScene(start).catch(showErr); }
+});
 
 
 // ---------------- compass, scale bar, cursor readout ----------------

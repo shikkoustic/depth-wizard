@@ -19,6 +19,15 @@ def create_app(data_dir):
     app = FastAPI(title="DepthWizard")
     app.add_middleware(GZipMiddleware, minimum_size=4096, compresslevel=4)
 
+    @app.middleware("http")
+    async def no_cache_shell(request, call_next):
+        # the page shell and scene manifests must never be stale; hashed assets can be cached
+        resp = await call_next(request)
+        path = request.url.path
+        if path == "/" or path.endswith((".html", "scene.json")) or path.startswith("/api/"):
+            resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
     @app.get("/api/scenes")
     def list_scenes():
         out = []
@@ -26,8 +35,11 @@ def create_app(data_dir):
             f = d / "scene.json"
             if f.exists():
                 m = json.loads(f.read_text())
+                group = next((g for pre, g in (("bench_", "LiDAR benchmark (USGS 3DEP)"), ("gamus_", "GAMUS test tiles"),
+                                               ("india_", "India demos (Sentinel-2)"), ("sf_", "LiDAR reference only"))
+                              if d.name.startswith(pre)), "Your uploads")
                 out.append(dict(id=d.name, url=f"./scenes/{d.name}", title=m.get("title") or d.name,
-                                height_kind=m.get("height_kind")))
+                                height_kind=m.get("height_kind"), group=group))
         return out
 
     @app.post("/api/jobs")
