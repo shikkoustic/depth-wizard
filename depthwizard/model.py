@@ -60,7 +60,10 @@ class HeightModel:
             meta = ck["meta"] if isinstance(ck, dict) and "meta" in ck else {}
             sd = ck["state_dict"] if isinstance(ck, dict) and "state_dict" in ck else ck
             # architecture config ships with the package, so no network access is needed at inference time
-            cfg = AutoConfig.from_pretrained(os.path.join(os.path.dirname(__file__), "configs", meta.get("variant", variant)))
+            if "variant" not in meta:  # older checkpoints: infer the backbone from its embedding width
+                width = sd["backbone.embeddings.cls_token"].shape[-1]
+                meta = dict(meta, variant={384: "Small", 768: "Base"}.get(width, variant))
+            cfg = AutoConfig.from_pretrained(os.path.join(os.path.dirname(__file__), "configs", meta["variant"]))
             net = AutoModelForDepthEstimation.from_config(cfg)
             net.load_state_dict({k: v.float() for k, v in sd.items()})
             self.nets.append(net.to(self.device).eval()); self.in_sizes.append(int(meta.get("in_size", IN)))
