@@ -9,7 +9,10 @@ Pixel-pooled metrics over the full GAMUS test split (0.66 m/px, heights in metre
 | Run | Backbone | Test tiles | RMSE | MAE | Bias | Corr | per-tile RMSE | best epoch |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | base_main | Base | 2861 | 3.85 | 1.69 | 0.12 | 0.856 | 2.85 | 7 |
+| holdout_dc | Small | 361 | 6.87 | 4.13 | -2.63 | 0.759 | 6.09 | 9 |
 | small_main | Small | 2861 | 4.07 | 1.79 | 0.03 | 0.837 | 3.00 | 10 |
+
+`holdout_dc` was trained **without any Washington DC tiles** and tested only on DC test tiles, so it measures transfer to an unseen city. Compare with the DC row of the per-city breakdown of the runs that saw DC in training. Baselines on the same DC tiles: predict 0 m RMSE 12.03 m, per-tile mean oracle RMSE 8.07 m.
 
 Baselines on the same test tiles:
 
@@ -61,6 +64,46 @@ Test-time augmentation (800 test tiles): single pass RMSE 3.62 m → 8-view mean
 | 0.81–1.17 | 3.30 | 4.58 |
 | 1.17–17.71 | 5.18 | 8.17 |
 
+### holdout_dc: breakdown
+
+| Class | RMSE | MAE | Bias | pixels |
+| --- | --- | --- | --- | --- |
+| others | 5.93 | 4.99 | 3.92 | 598,429 |
+| ground | 2.09 | 0.54 | 0.43 | 14,058,935 |
+| low_veg | 2.76 | 1.38 | 0.73 | 8,368,102 |
+| building | 5.76 | 3.63 | -0.72 | 20,484,024 |
+| water | 5.30 | 5.13 | 4.96 | 2,037,940 |
+| road | 4.12 | 1.97 | -1.08 | 23,102,311 |
+| tree | 11.08 | 9.18 | -8.98 | 25,984,243 |
+
+| True height band | RMSE | MAE | Bias |
+| --- | --- | --- | --- |
+| 0-2m | 2.65 | 0.85 | 0.67 |
+| 2-5m | 3.37 | 2.54 | -0.50 |
+| 5-10m | 4.15 | 3.23 | -2.02 |
+| 10-20m | 8.09 | 7.06 | -6.34 |
+| 20-40m | 15.34 | 14.04 | -13.44 |
+| 40-infm | 18.56 | 15.71 | -15.41 |
+
+| City | pixels | RMSE | MAE | Corr |
+| --- | --- | --- | --- | --- |
+| DC | 94,633,984 | 6.87 | 4.13 | 0.759 |
+
+Test-time augmentation (361 test tiles): single pass RMSE 6.87 m → 8-view mean RMSE 6.74 m. Spearman correlation between the 8-view spread and the absolute error: 0.663.
+
+| spread decile (m) | MAE (m) | RMSE (m) |
+| --- | --- | --- |
+| 0.00–0.00 | — | — |
+| 0.00–0.01 | 0.81 | 2.23 |
+| 0.01–0.08 | 0.84 | 2.28 |
+| 0.08–0.27 | 1.86 | 3.57 |
+| 0.27–0.47 | 3.40 | 5.43 |
+| 0.47–0.65 | 5.08 | 7.31 |
+| 0.65–0.83 | 6.22 | 8.50 |
+| 0.83–1.05 | 6.92 | 9.25 |
+| 1.05–1.47 | 7.36 | 9.74 |
+| 1.47–14.50 | 7.11 | 9.56 |
+
 ### small_main: breakdown
 
 | Class | RMSE | MAE | Bias | pixels |
@@ -102,6 +145,15 @@ Test-time augmentation (800 test tiles): single pass RMSE 3.81 m → 8-view mean
 | 0.63–0.86 | 2.80 | 4.01 |
 | 0.86–1.25 | 3.50 | 4.89 |
 | 1.25–13.90 | 5.52 | 8.74 |
+
+## 3. Held-out rural / forest / hilly regions (NAIP + 3DEP LiDAR)
+
+99 test tiles from whole LiDAR regions never used for training or model selection (region-level split of the NAIP+3DEP set built by `kaggle/naip_prep`; benchmark sites excluded). Reference = LiDAR top surface above ground. Predicting 0 m everywhere scores RMSE 8.56 m.
+
+| Model | RMSE | MAE | Bias | Corr | RMSE on >20 m vegetation (bias) |
+| --- | --- | --- | --- | --- | --- |
+| base-main | 5.66 | 3.81 | -1.78 | 0.606 | 11.77 (-10.84) |
+| small-main | 6.14 | 4.06 | -1.82 | 0.529 | 11.47 (-10.76) |
 
 ## 2. Full pipeline (absolute DSM) vs USGS 3DEP LiDAR
 
