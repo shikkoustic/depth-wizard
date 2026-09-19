@@ -18,7 +18,7 @@ R = dict(cfg=CFG, gpu=torch.cuda.get_device_name(0))
 def save(): json.dump(R, open(f"{OUT}/results.json", "w"), indent=1, default=float)
 
 # ---------------- data ----------------
-meta_path = glob.glob("/kaggle/input/**/meta.json", recursive=True)[0]
+meta_path = (glob.glob("/kaggle/input/**/meta.json", recursive=True) + glob.glob("/tmp/gamus_prep/meta.json"))[0]
 D = os.path.dirname(meta_path); META = json.load(open(meta_path)); log("data dir", D)
 def load(split, cities=None, exclude=None, ram=True):
     m = META["splits"][split]
