@@ -6,10 +6,10 @@ for line in open(os.path.join(here, "sites.txt")):
         continue
     name, terrain, *bbox = line.split()
     if os.path.exists(os.path.join(here, "sites", name, "site.json")):
-        print(name, "already fetched"); continue
+        print(name, "already fetched", flush=True); continue
     try:
         r = subprocess.run([sys.executable, os.path.join(here, "fetch_site.py"), "--name", name, "--terrain", terrain, "--bbox", *bbox],
-                           capture_output=True, text=True, timeout=420)
+                           capture_output=True, text=True, timeout=900)
         print(name, "ok" if r.returncode == 0 else "FAILED: " + (r.stderr or r.stdout).strip().splitlines()[-1][:200], flush=True)
     except subprocess.TimeoutExpired:
         print(name, "TIMEOUT", flush=True)

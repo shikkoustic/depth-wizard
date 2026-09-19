@@ -12,11 +12,31 @@ MODEL_GSD = 0.66          # metres per pixel the model was trained at (GAMUS 0.3
 TILE, IN = 512, 518
 MEAN = np.array([0.485, 0.456, 0.406], np.float32)[:, None, None]
 STD = np.array([0.229, 0.224, 0.225], np.float32)[:, None, None]
-DEFAULT_WEIGHTS = os.environ.get("DEPTHWIZARD_WEIGHTS", os.path.join(os.path.dirname(__file__), "weights", "ndsm_small.pt"))
+WEIGHTS_URL = os.environ.get("DEPTHWIZARD_WEIGHTS_URL",
+                             "https://github.com/shikkoustic/depth-wizard/releases/latest/download/ndsm_small.pt")
+CACHE = os.path.join(os.path.expanduser("~"), ".cache", "depthwizard")
+DEFAULT_WEIGHTS = os.environ.get("DEPTHWIZARD_WEIGHTS", os.path.join(CACHE, "ndsm_small.pt"))
+
+
+def ensure_weights(path=DEFAULT_WEIGHTS, url=WEIGHTS_URL, progress=None):
+    """Return a local weights path, downloading the released checkpoint on first use."""
+    if os.path.exists(path):
+        return path
+    import urllib.request
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".part"
+    with urllib.request.urlopen(url, timeout=60) as r, open(tmp, "wb") as f:
+        total, done = int(r.headers.get("Content-Length") or 0), 0
+        while chunk := r.read(1 << 20):
+            f.write(chunk); done += len(chunk)
+            if progress and total:
+                progress(f"Downloading model weights: {done / total:.0%} of {total / 1e6:.0f} MB")
+    os.replace(tmp, path)
+    return path
 
 
 class HeightModel:
-    def __init__(self, weights=DEFAULT_WEIGHTS, variant="Small", device=None, threads=None):
+    def __init__(self, weights=None, variant="Small", device=None, threads=None, progress=None):
         import torch
         from transformers import AutoConfig, AutoModelForDepthEstimation
         self.torch = torch
@@ -24,8 +44,13 @@ class HeightModel:
         self.device = device or os.environ.get("DEPTHWIZARD_DEVICE") or ("cuda" if torch.cuda.is_available() else "cpu")
         torch.set_num_threads(threads or int(os.environ.get("DEPTHWIZARD_THREADS", "4")))
         repo = f"depth-anything/Depth-Anything-V2-{variant}-hf"
+        weights = weights or DEFAULT_WEIGHTS
         if not os.path.exists(weights):
-            raise FileNotFoundError(f"model weights not found at {weights} (set DEPTHWIZARD_WEIGHTS or see README)")
+            try:
+                weights = ensure_weights(weights, progress=progress)
+            except Exception as e:
+                raise FileNotFoundError(f"model weights not found at {weights} and download from {WEIGHTS_URL} failed "
+                                        f"({type(e).__name__}: {e}); pass --weights or set DEPTHWIZARD_WEIGHTS") from e
         cfg = AutoConfig.from_pretrained(repo)
         self.net = AutoModelForDepthEstimation.from_config(cfg)
         sd = torch.load(weights, map_location="cpu")

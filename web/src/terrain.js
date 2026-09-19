@@ -163,14 +163,14 @@ export function buildTerrain(scene, heights, { photo, maxVerts = 1_500_000, base
   return mesh;
 }
 
-export function setOverlay(mesh, { name, data, w, h, range, ramp, opacity }) {
+export function setOverlay(mesh, cfg) {
   const u = mesh.material.uniforms;
-  if (!name) { u.uMode.value = 0; return; }
-  mesh.userData.overlayTex?.dispose?.();
-  const t = floatTexture(data, w, h);
-  mesh.userData.overlayTex = t;
-  u.uData.value = t; u.uMode.value = 1;
-  u.uRange.value.set(range[0], range[1]);
-  u.uRamp.value = rampTexture(ramp);
-  if (opacity !== undefined) u.uOpacity.value = opacity;
+  if (!cfg || !cfg.name) { u.uMode.value = 0; return; }
+  // one GPU texture per overlay, shared by every surface mesh
+  if (!cfg.tex) cfg.tex = floatTexture(cfg.data, cfg.w, cfg.h);
+  if (!cfg.rampTex) cfg.rampTex = rampTexture(cfg.ramp);
+  u.uData.value = cfg.tex; u.uMode.value = 1;
+  u.uRange.value.set(cfg.range[0], cfg.range[1]);
+  u.uRamp.value = cfg.rampTex;
+  if (cfg.opacity !== undefined) u.uOpacity.value = cfg.opacity;
 }

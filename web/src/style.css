@@ -57,3 +57,5 @@ details { margin: 6px 0; color: var(--muted); } details label { font-size: 12px;
 #err-hist { width: 100%; background: #0d1117; border: 1px solid var(--line); border-radius: 6px; margin-top: 6px; }
 #job-bar { height: 5px; background: #0d1117; border-radius: 3px; overflow: hidden; } #job-bar div { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
 #empty > div { text-align: center; line-height: 1.7; } #empty b { font-size: 20px; color: var(--text); }
+
+[hidden] { display: none !important; }

@@ -1,9 +1,11 @@
-# name              terrain  W        S       E        N        (all outside GAMUS training cities PHL/NYC/DC)
+# name              terrain  W        S       E        N        (all outside GAMUS training cities PHL/NYC/DC; boxes sit inside one 3DEP tile)
 sf_downtown         urban    -122.404 37.787  -122.396 37.794
 pittsburgh_hills    urban    -80.010  40.440  -80.000  40.448
 denver_midrise      urban    -104.998 39.742  -104.988 39.750
-phoenix_suburb      sparse   -112.105 33.600  -112.095 33.608
-iowa_farmland       sparse   -93.625  42.010  -93.615  42.018
+albuquerque_suburb  sparse   -106.580 35.170  -106.570 35.178
+kansas_farmland     sparse   -97.190  38.150  -97.180  38.158
+illinois_farmland   sparse   -89.200  40.280  -89.190  40.288
+boulder_foothills   hilly    -105.280 39.975  -105.270 39.983
+wv_hills            hilly    -80.780  38.250  -80.770  38.258
 smoky_forest        forest   -83.515  35.600  -83.505  35.608
-oregon_forest       forest   -122.100 45.300  -122.090 45.308
-boulder_foothills   hilly    -105.300 39.990  -105.290 39.998
+maine_forest        forest   -69.240  44.980  -69.230  44.988

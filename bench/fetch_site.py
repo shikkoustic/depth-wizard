@@ -30,10 +30,15 @@ def _post(url, body):
 
 
 def sign(href, collection):
-    if collection not in _tokens:
-        _tokens[collection] = json.load(urllib.request.urlopen(
-            f"https://planetarycomputer.microsoft.com/api/sas/v1/token/{collection}", timeout=60))["token"]
-    return f"{href}?{_tokens[collection]}"
+    """SAS-sign an asset URL. Tokens are per storage container, so cache by account/container, not collection."""
+    if "blob.core.windows.net" not in href:
+        return href
+    acct, cont = href.split("//")[1].split(".")[0], href.split("blob.core.windows.net/")[1].split("/")[0]
+    key = (acct, cont)
+    if key not in _tokens:
+        _tokens[key] = json.load(urllib.request.urlopen(
+            f"https://planetarycomputer.microsoft.com/api/sas/v1/token/{acct}/{cont}", timeout=60))["token"]
+    return f"{href}?{_tokens[key]}"
 
 
 def search(collection, bbox, **kw):
@@ -75,6 +80,9 @@ def crop(href, collection, bbox, out_path, bands=None):
     with rasterio.open(sign(href, collection)) as src:
         b = transform_bounds("EPSG:4326", src.crs, *bbox, densify_pts=21)
         win = from_bounds(*b, transform=src.transform).round_offsets().round_lengths()
+        win = win.intersection(rasterio.windows.Window(0, 0, src.width, src.height))
+        if win.width < 10 or win.height < 10:
+            raise SystemExit(f"{collection}: item raster does not cover the bbox")
         data = src.read(bands, window=win) if bands else src.read(window=win)
         prof = src.profile.copy()
         prof.update(driver="GTiff", width=data.shape[-1], height=data.shape[-2], count=data.shape[0],
@@ -105,12 +113,18 @@ def main():
     meta["layers"]["naip"] = dict(item=it["id"], date=it["properties"]["datetime"],
                                   **crop(it["assets"]["image"]["href"], "naip", a.bbox, f"{out}/naip.tif", bands=[1, 2, 3]))
 
+    dsm_id = None
     for kind in ("dsm", "dtm", "hag"):
         col = f"3dep-lidar-{kind}"
         items = covering(search(col, a.bbox), a.bbox)
+        if dsm_id:  # use the same LiDAR project/tile for DTM and HAG as for the DSM
+            same = [i for i in items if i["id"] == dsm_id.replace("-dsm-", f"-{kind}-")]
+            items = same or items
         if not items:
             raise SystemExit(f"no single {col} item covers this bbox; shrink or move it")
         it = items[0]
+        if kind == "dsm":
+            dsm_id = it["id"]
         meta["layers"][f"lidar_{kind}"] = dict(item=it["id"], date=it["properties"].get("datetime") or it["properties"].get("start_datetime"),
                                                **crop(it["assets"]["data"]["href"], col, a.bbox, f"{out}/lidar_{kind}.tif"))
 

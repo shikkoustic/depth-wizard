@@ -44,15 +44,10 @@ async function openScene(url) {
   const { meta, layers } = data, W = meta.width, H = meta.height, [dx, dy] = meta.pixel_size;
   S.base = robustRange(layers.dsm, 0.01, 0.99)[0];
 
-  const shared = {};
+  S.shared = {}; S.overlayCfg = null;
   const surfaces = [["dsm", "Prediction (DSM)"], ["ref", "Reference DSM"], ["ndsm", "Height above ground only (nDSM)"], ["dtm", "Terrain only (DTM)"]]
     .filter(([k]) => layers[k] && !(k === "ndsm" && meta.height_kind === "relative"));
-  for (const [k] of surfaces) {
-    const base = k === "ndsm" ? 0 : S.base; // nDSM starts at 0 m; the others share the DSM's floor
-    S.meshes[k] = buildTerrain(data, layers[k], { photo: data.photo, base, shared });
-    S.meshes[k].userData.base = base;
-    scene3.add(S.meshes[k]);
-  }
+  ensureMesh("dsm"); // other surfaces are built on first use (keeps GPU memory low on large scenes)
   $("surface").innerHTML = surfaces.map(([k, t]) => `<option value="${k}">${t}</option>`).join("");
   S.surface = "dsm";
 
@@ -114,7 +109,17 @@ $("contours").onchange = applyStyle; $("contour-step").oninput = applyStyle;
 $("exag").oninput = (e) => { S.exag = +e.target.value; $("exag-v").textContent = `${S.exag.toFixed(1)}×`; applyStyle(); };
 $("swipe").onchange = (e) => { S.swipe = e.target.checked; $("swipe-handle").hidden = !S.swipe; placeSwipe(); applySurface(); };
 
+function ensureMesh(k) {
+  if (S.meshes[k] || !S.data?.layers[k]) return S.meshes[k];
+  const base = k === "ndsm" ? 0 : S.base; // nDSM starts at 0 m; the others share the DSM's floor
+  const m = buildTerrain(S.data, S.data.layers[k], { photo: S.data.photo, base, shared: S.shared, maxVerts: 3_000_000 });
+  m.userData.base = base; S.meshes[k] = m; scene3.add(m);
+  if (S.overlayCfg) setOverlay(m, S.overlayCfg);
+  return m;
+}
 function applySurface() {
+  ensureMesh(S.surface); if (S.swipe) ensureMesh("ref");
+  applyStyle();
   for (const [k, m] of Object.entries(S.meshes)) m.visible = S.swipe ? (k === "dsm" || k === "ref") : k === S.surface;
 }
 function applyOverlay() {
@@ -126,7 +131,9 @@ function applyOverlay() {
     diff: S.derived.diff && { data: S.derived.diff, ramp: "diff", range: robustRange(S.derived.diff, 0.02, 0.98, true), unit: "m" },
     conf: layers.conf && { data: layers.conf, ramp: "conf", range: robustRange(layers.conf, 0.0, 0.98), unit: "m" },
   }[S.overlay];
-  for (const m of Object.values(S.meshes)) setOverlay(m, cfg ? { name: S.overlay, w: W, h: H, ...cfg } : {});
+  S.overlayCfg?.tex?.dispose(); S.overlayCfg?.rampTex?.dispose();
+  S.overlayCfg = cfg ? { name: S.overlay, w: W, h: H, ...cfg } : {};
+  for (const m of Object.values(S.meshes)) setOverlay(m, S.overlayCfg);
   $("legend").hidden = !cfg;
   if (cfg) {
     $("legend").querySelector(".bar").style.background = rampCSS(cfg.ramp);

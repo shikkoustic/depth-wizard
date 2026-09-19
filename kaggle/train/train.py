@@ -178,6 +178,7 @@ try:
         for k in range(0, len(order) - CFG["bs"] + 1, CFG["bs"]):
             b = np.sort(order[k:k + CFG["bs"]])
             x = torch.from_numpy(Xtr[b]).to(dev, non_blocking=True); y = torch.from_numpy(Ytr[b].astype(np.float32)).to(dev)
+            y = torch.where(torch.isfinite(y), y.clamp(min=0), y)  # the head is non-negative; ~3 % of LiDAR AGL (water) is < 0
             x, y = augment(x, y)
             with torch.autocast("cuda", dtype=torch.float16):
                 p = forward(model, norm_in(x), y.shape[-2:])

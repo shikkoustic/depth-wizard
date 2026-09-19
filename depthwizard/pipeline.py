@@ -22,10 +22,10 @@ MAX_UPSAMPLE = 3.0      # never invent more than 3x resolution for coarse inputs
 _MODEL = None
 
 
-def get_model():
+def get_model(progress=None):
     global _MODEL
     if _MODEL is None:
-        _MODEL = M.HeightModel()
+        _MODEL = M.HeightModel(progress=progress)
     return _MODEL
 
 
@@ -145,7 +145,7 @@ def process(image_path, out_dir, reference=None, dem=None, gcps=None, gsd=None, 
 
     tta = n_tta or (4 if Wg * Hg <= 4e6 else 2)
     progress("Loading height model")
-    net = get_model()
+    net = get_model(progress)
     ndsm, spread = net.predict(img, n_tta=tta, progress=lambda n, N: progress(f"Predicting heights: tile {n}/{N}"))
     ndsm[~valid] = np.nan; spread[~valid] = np.nan
     report["model"] = dict(gsd_m=work_gsd, tta_variants=tta, grid=[Wg, Hg])
