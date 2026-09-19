@@ -65,17 +65,12 @@ for name in ["DFC19", "OGC_ATL"]:
         R[name] = dict(scenes=len(scenes), crops=len(nd_files), gsd_estimate=gsd, n_blobs=n_blobs)
         if gsd is None: continue
         # splits by scene
-        test_ids = set()
-        tl = glob.glob(f"{d}/**/test_95.txt", recursive=True) or glob.glob(f"{d}/**/test.txt", recursive=True)
-        if tl:
-            for line in open(tl[0]):
-                m = re.match(r"(.+)_(\d+)_(\d+)", line.strip())
-                if m: test_ids.add(m.group(1))
+        # scene-level random split (the published OGC lists are per crop, which would leak once crops are
+        # re-assembled into scenes)
         rng = random.Random(1)
         split = {}
         for s in scenes:
-            if test_ids: split[s] = "test" if s in test_ids else ("val" if rng.random() < 0.1 else "train")
-            else: r = rng.random(); split[s] = "test" if r < 0.1 else "val" if r < 0.2 else "train"
+            r = rng.random(); split[s] = "test" if r < 0.1 else "val" if r < 0.2 else "train"
         n_out = 0
         order = scenes[:]; rng.shuffle(order)
         for s in order:
