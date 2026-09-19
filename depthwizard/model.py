@@ -44,32 +44,38 @@ class HeightModel:
         self.device = device or os.environ.get("DEPTHWIZARD_DEVICE") or ("cuda" if torch.cuda.is_available() else "cpu")
         torch.set_num_threads(threads or int(os.environ.get("DEPTHWIZARD_THREADS", "4")))
         weights = weights or DEFAULT_WEIGHTS
-        if not os.path.exists(weights):
-            try:
-                weights = ensure_weights(weights, progress=progress)
-            except Exception as e:
-                raise FileNotFoundError(f"model weights not found at {weights} and download from {WEIGHTS_URL} failed "
-                                        f"({type(e).__name__}: {e}); pass --weights or set DEPTHWIZARD_WEIGHTS") from e
-        ck = torch.load(weights, map_location="cpu")
-        # newer checkpoints carry metadata (backbone size, input size); older ones are a bare state_dict
-        self.meta = ck["meta"] if isinstance(ck, dict) and "meta" in ck else {}
-        sd = ck["state_dict"] if isinstance(ck, dict) and "state_dict" in ck else ck
-        self.in_size = int(self.meta.get("in_size", IN))
-        variant = self.meta.get("variant", variant)
-        # architecture config ships with the package, so no network access is needed at inference time
-        cfg = AutoConfig.from_pretrained(os.path.join(os.path.dirname(__file__), "configs", variant))
-        self.net = AutoModelForDepthEstimation.from_config(cfg)
-        self.net.load_state_dict({k: v.float() for k, v in sd.items()})
-        self.net.to(self.device).eval()
+        # several checkpoints (comma-separated) form an ensemble: predictions are averaged and their
+        # disagreement adds to the uncertainty map
+        paths = [p for p in str(weights).split(",") if p]
+        self.nets, self.in_sizes, self.meta = [], [], {}
+        for path in paths:
+            if not os.path.exists(path):
+                try:
+                    path = ensure_weights(path, progress=progress)
+                except Exception as e:
+                    raise FileNotFoundError(f"model weights not found at {path} and download from {WEIGHTS_URL} failed "
+                                            f"({type(e).__name__}: {e}); pass --weights or set DEPTHWIZARD_WEIGHTS") from e
+            ck = torch.load(path, map_location="cpu", weights_only=True)
+            # newer checkpoints carry metadata (backbone size, input size); older ones are a bare state_dict
+            meta = ck["meta"] if isinstance(ck, dict) and "meta" in ck else {}
+            sd = ck["state_dict"] if isinstance(ck, dict) and "state_dict" in ck else ck
+            # architecture config ships with the package, so no network access is needed at inference time
+            cfg = AutoConfig.from_pretrained(os.path.join(os.path.dirname(__file__), "configs", meta.get("variant", variant)))
+            net = AutoModelForDepthEstimation.from_config(cfg)
+            net.load_state_dict({k: v.float() for k, v in sd.items()})
+            self.nets.append(net.to(self.device).eval()); self.in_sizes.append(int(meta.get("in_size", IN)))
+            self.meta = self.meta or meta
+        self.in_size = self.in_sizes[0]
 
-    def _forward(self, batch):
-        """batch: float32 (B,3,512,512) in [0,1] -> (B,512,512) heights."""
+    def _forward(self, batch, net=0):
+        """batch: float32 (B,3,512,512) in [0,1] -> (B,512,512) heights from ensemble member `net`."""
         torch, F = self.torch, self.torch.nn.functional
         x = torch.from_numpy(batch).to(self.device)
-        x = F.interpolate(x, size=(self.in_size, self.in_size), mode="bilinear", align_corners=False)
+        size = self.in_sizes[net]
+        x = F.interpolate(x, size=(size, size), mode="bilinear", align_corners=False)
         x = (x - torch.from_numpy(MEAN).to(self.device)) / torch.from_numpy(STD).to(self.device)
         with torch.no_grad():
-            p = self.net(pixel_values=x).predicted_depth[:, None]
+            p = self.nets[net](pixel_values=x).predicted_depth[:, None]
             p = F.interpolate(p, size=batch.shape[-2:], mode="bilinear", align_corners=False)[:, 0]
         return p.float().cpu().numpy()
 
@@ -80,13 +86,20 @@ class HeightModel:
         for k, f in variants:
             v = np.rot90(t, k, axes=(1, 2)); v = v[:, :, ::-1] if f else v
             xs.append(np.ascontiguousarray(v))
-        outs = np.concatenate([self._forward(x[None]) for x in xs])  # one at a time: bounded memory
+        back = []
+        for net in range(len(getattr(self, "nets", [None]))):  # every ensemble member sees every variant
+            outs = np.concatenate([self._forward(x[None], net) if hasattr(self, "nets") else self._forward(x[None]) for x in xs])
+            back += self._unrotate(outs, variants)
+        back = np.stack(back)
+        return back.mean(0), (back.std(0) if len(back) > 1 else np.zeros_like(back[0]))
+
+    @staticmethod
+    def _unrotate(outs, variants):
         back = []
         for o, (k, f) in zip(outs, variants):
             o = o[:, ::-1] if f else o
             back.append(np.rot90(o, -k))
-        back = np.stack(back)
-        return back.mean(0), (back.std(0) if len(back) > 1 else np.zeros_like(back[0]))
+        return back
 
     def predict(self, rgb, n_tta=4, overlap=128, progress=None):
         """rgb: (H,W,3) uint8 already at MODEL_GSD. Returns (ndsm, spread) float32 (H,W)."""

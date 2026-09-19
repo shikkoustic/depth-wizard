@@ -125,6 +125,17 @@ def rural_section(ev):
     return L
 
 
+def robustness_section(rb):
+    L = ["", "## 4. Robustness to coarser imagery (augmentation ablation)", "",
+         f"{rb['n_tiles']} GAMUS test tiles degraded to simulate 1.3 m and 2 m imagery (downsample, then upsample to the "
+         "0.66 m model grid), scored against LiDAR. `ablation_plain` is the same Small model trained without the blur "
+         "augmentation, tall-pixel weighting and gradient loss. Reproduce with `bench/robustness.py`.", "",
+         row(["Model"] + [f"RMSE / corr at {k}" for k in next(iter(rb["models"].values()))]), row(["---"] * 4)]
+    for n, v in rb["models"].items():
+        L.append(row([n] + [f"{f(x['rmse'])} / {f(x['corr'], 3)}" for x in v.values()]))
+    return L
+
+
 def main():
     runs = {}
     for p in sorted(glob.glob(os.path.join(ROOT, "runs", "kaggle", "*", "results.json"))):
@@ -151,6 +162,9 @@ def main():
                                                                         bias=float(np.sum(w * np.array([v["bias"] for v in big])) / w.sum()))
                 ev["models"][name + " (trained with rural set)"] = dict(all=r["naip_test"]["pooled"], by_height={"20-infm": t20} if t20 else {})
         L += rural_section(ev)
+    rp = os.path.join(ROOT, "docs", "data", "robustness.json")
+    if os.path.exists(rp):
+        L += robustness_section(json.load(open(rp)))
     open(OUT, "w").write("\n".join(L) + "\n")
     print("wrote", OUT)
 
