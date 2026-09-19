@@ -1,0 +1,83 @@
+"""Above-ground height (nDSM) inference with a fine-tuned Depth Anything V2.
+
+The network was trained on GAMUS tiles resampled to MODEL_GSD metres per pixel and 512x512 px
+(fed to the network at 518x518). Inference reproduces that: the caller resamples the image to
+MODEL_GSD, and we run overlapping 512 px tiles blended with a smooth window. Test-time augmentation
+(flips / 90° rotations) gives both a better mean and a per-pixel spread used as the uncertainty map.
+"""
+import os
+import numpy as np
+
+MODEL_GSD = 0.66          # metres per pixel the model was trained at (GAMUS 0.33 m tiles downsampled 2x)
+TILE, IN = 512, 518
+MEAN = np.array([0.485, 0.456, 0.406], np.float32)[:, None, None]
+STD = np.array([0.229, 0.224, 0.225], np.float32)[:, None, None]
+DEFAULT_WEIGHTS = os.environ.get("DEPTHWIZARD_WEIGHTS", os.path.join(os.path.dirname(__file__), "weights", "ndsm_small.pt"))
+
+
+class HeightModel:
+    def __init__(self, weights=DEFAULT_WEIGHTS, variant="Small", device=None, threads=None):
+        import torch
+        from transformers import AutoConfig, AutoModelForDepthEstimation
+        self.torch = torch
+        # CPU by default: predictable memory on small machines (set DEPTHWIZARD_DEVICE=mps/cuda to override)
+        self.device = device or os.environ.get("DEPTHWIZARD_DEVICE") or ("cuda" if torch.cuda.is_available() else "cpu")
+        torch.set_num_threads(threads or int(os.environ.get("DEPTHWIZARD_THREADS", "4")))
+        repo = f"depth-anything/Depth-Anything-V2-{variant}-hf"
+        if not os.path.exists(weights):
+            raise FileNotFoundError(f"model weights not found at {weights} (set DEPTHWIZARD_WEIGHTS or see README)")
+        cfg = AutoConfig.from_pretrained(repo)
+        self.net = AutoModelForDepthEstimation.from_config(cfg)
+        sd = torch.load(weights, map_location="cpu")
+        self.net.load_state_dict({k: v.float() for k, v in sd.items()})
+        self.net.to(self.device).eval()
+
+    def _forward(self, batch):
+        """batch: float32 (B,3,512,512) in [0,1] -> (B,512,512) heights."""
+        torch, F = self.torch, self.torch.nn.functional
+        x = torch.from_numpy(batch).to(self.device)
+        x = F.interpolate(x, size=(IN, IN), mode="bilinear", align_corners=False)
+        x = (x - torch.from_numpy(MEAN).to(self.device)) / torch.from_numpy(STD).to(self.device)
+        with torch.no_grad():
+            p = self.net(pixel_values=x).predicted_depth[:, None]
+            p = F.interpolate(p, size=batch.shape[-2:], mode="bilinear", align_corners=False)[:, 0]
+        return p.float().cpu().numpy()
+
+    def _predict_tile(self, t, n_tta):
+        """t: (3,512,512) float. Returns mean and std over n_tta dihedral variants (std=0 if n_tta==1)."""
+        variants = [(k, f) for f in (False, True) for k in range(4)][:max(1, n_tta)]
+        xs = []
+        for k, f in variants:
+            v = np.rot90(t, k, axes=(1, 2)); v = v[:, :, ::-1] if f else v
+            xs.append(np.ascontiguousarray(v))
+        outs = np.concatenate([self._forward(x[None]) for x in xs])  # one at a time: bounded memory
+        back = []
+        for o, (k, f) in zip(outs, variants):
+            o = o[:, ::-1] if f else o
+            back.append(np.rot90(o, -k))
+        back = np.stack(back)
+        return back.mean(0), (back.std(0) if len(back) > 1 else np.zeros_like(back[0]))
+
+    def predict(self, rgb, n_tta=4, overlap=128, progress=None):
+        """rgb: (H,W,3) uint8 already at MODEL_GSD. Returns (ndsm, spread) float32 (H,W)."""
+        H, W = rgb.shape[:2]
+        ph, pw = max(0, TILE - H), max(0, TILE - W)
+        img = np.pad(rgb, ((0, ph), (0, pw), (0, 0)), mode="reflect") if (ph or pw) else rgb
+        Hp, Wp = img.shape[:2]
+        step = TILE - overlap
+        ys = list(range(0, max(1, Hp - TILE) + 1, step)); xs = list(range(0, max(1, Wp - TILE) + 1, step))
+        if ys[-1] != Hp - TILE: ys.append(Hp - TILE)
+        if xs[-1] != Wp - TILE: xs.append(Wp - TILE)
+        w1 = np.hanning(TILE + 2)[1:-1].astype(np.float32); win = np.outer(w1, w1) + 1e-3
+        acc = np.zeros((Hp, Wp), np.float32); acc2 = np.zeros_like(acc); wsum = np.zeros_like(acc)
+        n, total = 0, len(ys) * len(xs)
+        for y in ys:
+            for x in xs:
+                t = img[y:y + TILE, x:x + TILE].transpose(2, 0, 1).astype(np.float32) / 255.
+                m, s = self._predict_tile(t, n_tta)
+                acc[y:y + TILE, x:x + TILE] += m * win; acc2[y:y + TILE, x:x + TILE] += s * win
+                wsum[y:y + TILE, x:x + TILE] += win
+                n += 1
+                if progress: progress(n, total)
+        nd = (acc / wsum)[:H, :W]; sp = (acc2 / wsum)[:H, :W]
+        return np.clip(nd, 0, None).astype(np.float32), sp.astype(np.float32)
