@@ -80,6 +80,8 @@ def bench_section(res):
     L += [row(["Site", "Terrain", "ours", "ours + coarse-DEM scale", "ours + 5 GCP", "FABDEM only", "Copernicus only",
                "nDSM RMSE (ours / zero)", "datum offset"]), row(["---"] * 9)]
     agg = {}
+    bad = {n: r for n, r in res.items() if r.get("valid") is False}
+    res = {n: r for n, r in res.items() if r.get("valid") is not False}
     for name, r in res.items():
         d = r["datum_aligned"]
         g = lambda k: f(d.get(k, {}) and d[k]["rmse"]) if d.get(k) else "—"
@@ -94,6 +96,9 @@ def bench_section(res):
     for t, v in agg.items():
         n = len(v.get("ours", []))
         L.append(row([t, n] + [f(np.mean(v[k])) if v.get(k) else "—" for k in ("ours", "ours_5gcp", "fabdem_only", "copernicus_only")]))
+    if bad:
+        L += ["", "Sites excluded automatically because the reference LiDAR itself failed a consistency check:", ""]
+        L += [f"- `{n}` ({r['terrain']}): {r['invalid_reason']}" for n, r in bad.items()]
     L += ["", "MAE and correlation per site and method are in `runs/bench/bench_results.json`."]
     return L
 

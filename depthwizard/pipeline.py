@@ -172,7 +172,8 @@ def process(image_path, out_dir, reference=None, dem=None, gcps=None, gsd=None, 
             if info.get("double_count_risk") is True:
                 notes.append("warning: terrain is a surface model; buildings/trees may be double-counted")
             if gcps:
-                corr, ginfo = _gcp_correction(dtm + np.nan_to_num(ndsm), tr, _read_gcps(gcps))
+                # GCPs are surveyed ground points: they correct the terrain, so compare them with the DTM
+                corr, ginfo = _gcp_correction(dtm, tr, _read_gcps(gcps))
                 report["gcp"] = ginfo
                 if corr is not None:
                     dtm = dtm + corr; notes.append(f"GCP correction: {ginfo['model']} from {ginfo['n_used']} points")

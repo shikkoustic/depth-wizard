@@ -64,8 +64,20 @@ def main():
             L_dsm = ref.read(1, masked=True).filled(np.nan).astype(np.float32)
             ours = onto(f"{scene}/dsm.tif", ref); nd = onto(f"{scene}/ndsm.tif", ref); dtm_used = onto(f"{scene}/dtm.tif", ref)
             L_dtm = onto(f"{d}/lidar_dtm.tif", ref)
-            fab = _mosaic(_fabdem_url, ref.transform, ref.crs, (ref.height, ref.width))
-            cop = _mosaic(_cop30_url, ref.transform, ref.crs, (ref.height, ref.width))
+            cache = f"{d}/dem_cache.npz"  # FABDEM / Copernicus on the LiDAR grid, fetched once per site
+            if os.path.exists(cache):
+                c = np.load(cache); fab, cop = c["fab"], c["cop"]
+            else:
+                fab = _mosaic(_fabdem_url, ref.transform, ref.crs, (ref.height, ref.width))
+                cop = _mosaic(_cop30_url, ref.transform, ref.crs, (ref.height, ref.width))
+                np.savez_compressed(cache, fab=fab, cop=cop)
+        # Reference surface: some 3DEP DSM products under-record canopy/roof tops (measured: 7-16 m below
+        # DTM + HAG on trees at several sites, while an independent canopy map agrees with HAG). Use the top
+        # surface DTM + HAG where it lies 0-40 m above the DSM product; keep the DSM elsewhere (guards HAG spikes).
+        L_hag0 = onto(f"{d}/lidar_hag.tif", ref)
+        top = L_dtm + L_hag0; lift = top - L_dsm
+        use_top = np.isfinite(lift) & (lift > 0) & (lift <= 40)
+        L_dsm = np.where(use_top, top, L_dsm).astype(np.float32)
         L_nd = L_dsm - L_dtm
         footprint = np.isfinite(ours)
         # LiDAR DTM sanity: 3DEP DTM keeps building remnants under dense high-rises; drop pixels where the
@@ -74,7 +86,17 @@ def main():
         ground = np.isfinite(L_nd) & (L_nd < 0.5) & dtm_ok
         datum = float(np.nanmedian((fab - L_dtm)[ground])) if ground.sum() > 100 else 0.0
         r = dict(terrain=site.get("terrain"), datum_offset_m=datum, relief_m=site.get("terrain_relief_m"),
+                 frac_ref_from_dtm_plus_hag=float(use_top[footprint].mean()),
                  lidar_ndsm_mean=float(np.nanmean(L_nd[footprint])), pipeline=rep)
+        # reference validity (documented, automatic): broken catalogue entries are reported but not scored
+        L_hag = onto(f"{d}/lidar_hag.tif", ref)
+        lid_ground = np.isfinite(L_hag) & (L_hag < 0.3) & np.isfinite(L_nd)
+        why = []
+        if abs(datum) > 20:
+            why.append(f"LiDAR bare earth differs from FABDEM by {datum:.0f} m (mislabelled elevations)")
+        if lid_ground.sum() > 1000 and np.median(L_nd[lid_ground]) > 2:
+            why.append(f"LiDAR DSM sits {np.median(L_nd[lid_ground]):.1f} m above its own DTM on ground pixels (inconsistent products)")
+        r["valid"], r["invalid_reason"] = not why, "; ".join(why)
         # variant A: rescale nDSM so its 90 m block means match Copernicus - FABDEM (low-res DEM calibration)
         cal = coarse_scale(nd, cop - fab, abs(ref.transform.a))
         r["coarse_calibration"] = cal
@@ -85,7 +107,7 @@ def main():
         if gi.size >= 5:
             pick = rng.choice(gi, 5, replace=False); rr, cc = np.unravel_index(pick, L_dsm.shape)
             xs = ref.transform.c + (cc + 0.5) * ref.transform.a; ys = ref.transform.f + (rr + 0.5) * ref.transform.e
-            corr, ginfo = _gcp_correction(ours, ref.transform, np.c_[xs, ys, L_dsm[rr, cc]])
+            corr, ginfo = _gcp_correction(dtm_used, ref.transform, np.c_[xs, ys, L_dsm[rr, cc]])  # ground points vs terrain
             r["gcp5"] = ginfo
             if corr is not None:
                 variants.insert(2, ("ours_5gcp", ours + corr))

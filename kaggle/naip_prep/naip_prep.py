@@ -67,11 +67,12 @@ def fabdem_url(lat, lon):
 def process_item(f):
     """Returns (item_meta, [ (rgb uint8 512x512x3, ndsm float32 512x512) ... ]) or (reason, [])."""
     try:
-        dtm_id = f["id"].replace("-dsm-", "-dtm-")
-        dtm_item = get(f"{STAC}/collections/3dep-lidar-dtm/items/{dtm_id}")
-        with rasterio.open(sign(f["assets"]["data"]["href"])) as dsm, rasterio.open(sign(dtm_item["assets"]["data"]["href"])) as dtm:
-            if dsm.transform != dtm.transform or dsm.shape != dtm.shape:
-                return ("dsm/dtm grids differ", [])
+        dtm_item = get(f"{STAC}/collections/3dep-lidar-dtm/items/{f['id'].replace('-dsm-', '-dtm-')}")
+        hag_item = get(f"{STAC}/collections/3dep-lidar-hag/items/{f['id'].replace('-dsm-', '-hag-')}")
+        with rasterio.open(sign(f["assets"]["data"]["href"])) as dsm, rasterio.open(sign(dtm_item["assets"]["data"]["href"])) as dtm, \
+             rasterio.open(sign(hag_item["assets"]["data"]["href"])) as hag:
+            if dsm.transform != dtm.transform or dsm.shape != dtm.shape or hag.transform != dsm.transform or hag.shape != dsm.shape:
+                return ("dsm/dtm/hag grids differ", [])
             # item-level QC on a coarse overview: LiDAR bare earth must agree with FABDEM (catches mislabelled tiles)
             ov = dtm.read(1, out_shape=(64, 64), masked=True).filled(np.nan).astype(np.float32)
             tb = transform_bounds(dtm.crs, "EPSG:4326", *dtm.bounds)
@@ -94,7 +95,12 @@ def process_item(f):
                 win = rasterio.windows.Window(c0, r0, tile_px, tile_px)
                 a = dsm.read(1, window=win, masked=True).filled(np.nan).astype(np.float32)
                 b = dtm.read(1, window=win, masked=True).filled(np.nan).astype(np.float32)
+                h = hag.read(1, window=win, masked=True).filled(np.nan).astype(np.float32)
+                # label = top surface above ground: some DSM products under-record canopy tops, so take HAG where it
+                # exceeds DSM - DTM by 0-40 m (larger gaps are HAG spikes) — same rule as the benchmark reference
                 nd = a - b
+                lift = h - nd
+                nd = np.where(np.isfinite(lift) & (lift > 0) & (lift <= 40), h, nd)
                 if np.isnan(nd).mean() > 0.01 or np.nanmax(np.abs(nd)) > 250:
                     continue
                 if np.nanpercentile(nd, 2) > 1.5 or (nd < -1).mean() > 0.03:  # DSM/DTM inconsistent (e.g. DSM offset)

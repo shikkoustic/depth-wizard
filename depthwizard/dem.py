@@ -6,7 +6,7 @@ HTTPS with windowed COG reads. Fallback: Copernicus GLO-30 *surface* model from 
 contains buildings/forest, so adding an nDSM on top double-counts them; flagged in the output).
 A local DEM file can always be supplied instead (offline use).
 """
-import math
+import math, time
 import numpy as np
 from rasterio.transform import array_bounds
 from rasterio.warp import transform_bounds
@@ -38,12 +38,19 @@ def _tiles(dst_transform, dst_crs, shape):
 def _mosaic(url_fn, dst_transform, dst_crs, shape):
     out = np.full(shape, np.nan, np.float32)
     for la, lo in _tiles(dst_transform, dst_crs, shape):
-        try:
-            a = read_onto_grid(url_fn(la, lo), dst_transform, dst_crs, shape, method="bilinear")
-        except Exception as e:  # missing tile (open ocean) or network error
-            if "404" in str(e) or "does not exist" in str(e) or "No such file" in str(e):
-                continue
-            raise
+        a = None
+        for attempt in range(4):  # remote COG reads occasionally return truncated tiles: retry
+            try:
+                a = read_onto_grid(url_fn(la, lo), dst_transform, dst_crs, shape, method="bilinear")
+                break
+            except Exception as e:
+                if "404" in str(e) or "does not exist" in str(e) or "No such file" in str(e):
+                    break  # missing tile (open ocean)
+                if attempt == 3:
+                    raise
+                time.sleep(2 * (attempt + 1))
+        if a is None:
+            continue
         out = np.where(np.isfinite(a), a, out)
     return out
 
