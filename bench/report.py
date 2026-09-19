@@ -71,7 +71,11 @@ def gamus_section(runs):
 
 def bench_section(res):
     L = ["", "## 2. Full pipeline (absolute DSM) vs USGS 3DEP LiDAR", "",
-         "Input: NAIP 0.6 m RGB GeoTIFF (aerial, not satellite). Output compared with the 3DEP LiDAR DSM on its 2 m grid. "
+         "Input: NAIP 0.6 m RGB GeoTIFF (aerial, not satellite). Output compared with the 3DEP LiDAR top surface on its 2 m grid. "
+         "Reference rule: the 3DEP DSM product under-records canopy/roof tops for some LiDAR projects (measured 7–16 m below "
+         "DTM + height-above-ground on tree pixels; at the Kansas site an independent 1 m canopy map (Meta/WRI) gave 9.6 m "
+         "on trees vs 10.9 m HAG vs 3.8 m DSM−DTM), so the reference is DTM + HAG where that lies 0–40 m above the DSM "
+         "product, and the DSM product elsewhere. "
          "`ours` = FABDEM bare-earth terrain + predicted above-ground height. Datum-aligned rows remove one per-site "
          "vertical offset (NAVD88 vs EGM2008), estimated on LiDAR bare-ground pixels and applied equally to every method; "
          "that offset uses the reference, so treat it as an upper bound. `ours_5gcp` instead corrects the terrain with 5 "
