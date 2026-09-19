@@ -21,5 +21,6 @@ open(os.path.join(d, "train.py"), "w").write(src.replace("#@CFG@", line))
 slug = f"depthwizard-train-{name}".replace("_", "-")
 json.dump({"id": f"{owner}/{slug}", "title": slug, "code_file": "train.py", "language": "python", "kernel_type": "script",
            "is_private": True, "enable_gpu": True, "enable_internet": True, "dataset_sources": [], "competition_sources": [],
-           "kernel_sources": [] if self_prep else ["shikkoustic/depthwizard-gamus-prep"]}, open(os.path.join(d, "kernel-metadata.json"), "w"), indent=1)
+           "kernel_sources": ([] if self_prep else ["shikkoustic/depthwizard-gamus-prep"])
+                             + (["shikkoustic/depthwizard-naip-prep"] if overrides.get("extra_naip") == "True" else [])}, open(os.path.join(d, "kernel-metadata.json"), "w"), indent=1)
 print(d, "|", line)

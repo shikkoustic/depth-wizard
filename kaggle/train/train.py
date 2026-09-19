@@ -4,7 +4,7 @@
 CFG = dict(name="small_main", model="Small", epochs=14, bs=8, accum=1, lr_enc=5e-6, lr_dec=5e-5,
            tall_weight=True, grad_loss=0.5, degrade=True, holdout_city=None, time_budget_h=10.5,
            n_tta_eval=800, zeroshot_baseline=True, smoke=False,
-           in_size=518, tall_cap=3.0, oversample_tall=0.0)
+           in_size=518, tall_cap=3.0, oversample_tall=0.0, extra_naip=False)
 #@CFG@
 
 import os, json, time, math, random, glob, traceback
@@ -36,6 +36,17 @@ tr_ids, Xtr, Ytr, _ = load("train", exclude=hc)
 va_ids, Xva, Yva, _ = load("val", exclude=hc)
 if CFG["smoke"]:  # quick end-to-end check of the whole script on a few tiles
     tr_ids, Xtr, Ytr = tr_ids[:64], Xtr[:64], Ytr[:64]; va_ids, Xva, Yva = va_ids[:32], Xva[:32], Yva[:32]
+# optional extra data: NAIP + 3DEP LiDAR tiles (rural / forest / hilly / arid), split by region
+XnV = YnV = XnT = YnT = None
+if CFG["extra_naip"]:
+    nm_path = glob.glob("/kaggle/input/**/naip_meta.json", recursive=True)[0]; ND = os.path.dirname(nm_path)
+    NM = json.load(open(nm_path)); sp = np.array(NM["split"])
+    Xn = np.load(f"{ND}/naip_rgb.npy", mmap_mode="r"); Yn = np.load(f"{ND}/naip_agl.npy", mmap_mode="r")
+    itr, iva, ite = [np.flatnonzero(sp == k) for k in ("train", "val", "test")]
+    Xtr = np.concatenate([Xtr, Xn[itr]]); Ytr = np.concatenate([Ytr, Yn[itr]])
+    tr_ids = tr_ids + [f"NAIP_{i}" for i in itr]
+    XnV, YnV, XnT, YnT = np.asarray(Xn[iva]), np.asarray(Yn[iva]), np.asarray(Xn[ite]), np.asarray(Yn[ite])
+    R["naip"] = dict(train_tiles=len(itr), val_tiles=len(iva), test_tiles=len(ite), regions=len(NM["items"]))
 R["n_train"], R["n_val"] = len(tr_ids), len(va_ids)
 R["train_cities"] = sorted({i.split("_")[0] for i in tr_ids}); log("train", Xtr.shape, "val", Xva.shape, R["train_cities"]); save()
 
@@ -200,6 +211,9 @@ try:
                 scaler.step(opt); scaler.update(); opt.zero_grad(set_to_none=True); sched.step()
         Pv = predict(model, Xva[va_sub]); gv = Yva[va_sub].astype(np.float32)
         r = dict(ep=ep, train_loss=float(np.mean(L)), minutes=(time.time() - t_ep) / 60, **{f"val_{k}": v for k, v in pooled(Pv, gv).items()})
+        if XnV is not None and len(XnV):  # select on both domains: mean of GAMUS-val and NAIP-val RMSE
+            rn = pooled(predict(model, XnV), YnV.astype(np.float32)); r.update({f"naipval_{k}": v for k, v in rn.items()})
+            r["val_rmse_gamus"] = r["val_rmse"]; r["val_rmse"] = 0.5 * (r["val_rmse_gamus"] + rn["rmse"])
         hist.append(r); R["history"] = hist; log(r)
         if r["val_rmse"] < best[0]:
             best = (r["val_rmse"], ep); torch.save({"state_dict": {k: v.half() for k, v in model.state_dict().items()},
@@ -216,6 +230,11 @@ log("loaded best epoch", best[1])
 
 # full val with best model
 Pv = predict(model, Xva); R["val_full"] = pooled(Pv, Yva.astype(np.float32)); save(); del Pv
+if XnT is not None and len(XnT):  # held-out rural regions (never used for training or selection)
+    Pn = predict(model, XnT); Gn = YnT.astype(np.float32)
+    R["naip_test"] = dict(n_tiles=len(XnT), pooled=pooled(Pn, Gn), zero=pooled(np.zeros_like(Gn), Gn),
+                          by_height=breakdown(Pn, Gn, None, ["NAIP"] * len(Gn))["by_height"])
+    log("naip_test", json.dumps(R["naip_test"]["pooled"])); save(); del Pn
 
 # ---------------- test (once) ----------------
 te_ids, Xte, Yte, Cte = load("test", cities=[hc] if hc else None)
