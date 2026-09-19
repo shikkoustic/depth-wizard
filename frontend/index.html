@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DepthWizard - Monocular Satellite Elevation & 3D Flythrough (SIH26175)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #070b14; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+    .glass-panel { background: rgba(11, 19, 38, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7); }
+    .glass-panel-subtle { background: rgba(22, 34, 64, 0.65); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.08); }
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+    ::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.3); border-radius: 4px; }
+    .custom-scroll::-webkit-scrollbar { width: 4px; }
+    .custom-scroll::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.4); border-radius: 4px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.4); border-radius: 4px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: rgba(56, 189, 248, 0.7); }
+    /* Gradient Bars */
+    .hypsometric-bar { background: linear-gradient(to right, #001f3f, #0074d9, #2ecc40, #ffdc00, #ff4136, #ffffff); }
+    .slope-bar { background: linear-gradient(to right, #2ecc40, #ffdc00, #ff851b, #ff4136); }
+    /* Pulse Beacon */
+    @keyframes beaconPulse {
+      0% { transform: scale(0.9); opacity: 0.9; }
+      50% { transform: scale(1.4); opacity: 0.4; }
+      100% { transform: scale(0.9); opacity: 0.9; }
+    }
+    .beacon-glow { animation: beaconPulse 2s infinite ease-in-out; }
+    /* Split Screen Wipe Slider */
+    #wipe-divider { position: absolute; top: 0; bottom: 0; width: 4px; background: rgba(56, 189, 248, 0.95); cursor: ew-resize; z-index: 25; box-shadow: 0 0 20px rgba(56, 189, 248, 0.9); touch-action: none; pointer-events: auto; }
+    #wipe-divider::before { content: ''; position: absolute; top: 0; bottom: 0; left: -14px; right: -14px; cursor: ew-resize; }
+    #wipe-handle { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 38px; height: 38px; border-radius: 50%; background: #0f172a; border: 2.5px solid #38bdf8; display: flex; items-center: center; justify-content: center; box-shadow: 0 0 20px rgba(56, 189, 248, 0.8); cursor: ew-resize; pointer-events: auto; }
+  </style>
+</head>
+<body class="text-slate-100 select-none">
+
+  <!-- 3D Canvas Viewport -->
+  <div id="canvas-container"></div>
+
+  <!-- Interactive LiDAR Split-Screen Wipe Bar (Hidden by default) -->
+  <div id="wipe-divider" class="hidden" style="left: 50%;">
+    <div id="wipe-handle">
+      <i data-lucide="split" class="w-4 h-4 text-cyan-400"></i>
+      <div class="absolute -top-7 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-slate-900/90 border border-cyan-500/50 text-[9px] font-mono text-cyan-300 whitespace-nowrap shadow-lg pointer-events-none">Satellite ⟷ LiDAR</div>
+    </div>
+  </div>
+
+  <!-- Top Navigation Bar -->
+  <header class="absolute top-2.5 left-3 right-3 z-30 flex items-center justify-between pointer-events-none gap-2">
+    <div class="glass-panel rounded-2xl px-3.5 py-1.5 pointer-events-auto flex items-center space-x-2.5 shadow-2xl flex-shrink-0">
+      <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-500 via-indigo-500 to-purple-600 flex items-center justify-center shadow-md shadow-cyan-500/30">
+        <i data-lucide="mountain-snow" class="w-4 h-4 text-white"></i>
+      </div>
+      <div>
+        <div class="flex items-center space-x-1.5">
+          <h1 class="font-black text-sm tracking-wide bg-gradient-to-r from-white via-slate-100 to-cyan-300 bg-clip-text text-transparent">DepthWizard</h1>
+          <span class="text-[9px] uppercase font-extrabold tracking-wider px-1.5 py-0.2 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">SIH26175</span>
+          <span class="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center space-x-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+            <span>Real LiDAR</span>
+          </span>
+        </div>
+        <p class="text-[10px] text-slate-400 font-medium">Single-View Satellite Elevation & 3D Geospatial Digital Twin</p>
+      </div>
+    </div>
+
+    <!-- Center Flight Telemetry HUD (Active in Fly Mode) -->
+    <div id="flight-hud" class="hidden glass-panel rounded-2xl px-4 py-1.5 pointer-events-auto flex items-center space-x-4 shadow-2xl">
+      <div class="text-center">
+        <div class="text-[8px] uppercase tracking-wider text-slate-400">Heading</div>
+        <div id="hud-heading" class="font-mono text-[11px] font-bold text-cyan-400">045° NE</div>
+      </div>
+      <div class="w-px h-5 bg-slate-700"></div>
+      <div class="text-center">
+        <div class="text-[8px] uppercase tracking-wider text-slate-400">Altitude (ASL)</div>
+        <div id="hud-altitude" class="font-mono text-[11px] font-bold text-emerald-400">185.2 m</div>
+      </div>
+      <div class="w-px h-5 bg-slate-700"></div>
+      <div class="text-center">
+        <div class="text-[8px] uppercase tracking-wider text-slate-400">Speed</div>
+        <div id="hud-speed" class="font-mono text-[11px] font-bold text-amber-300">45 km/h</div>
+      </div>
+    </div>
+
+    <!-- Quick Actions, Presets & Tour Button -->
+    <div class="glass-panel rounded-2xl px-3 py-1.5 pointer-events-auto flex items-center space-x-2 shadow-2xl flex-shrink-0">
+      <button id="btn-tour" class="px-2.5 py-1 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-[11px] font-bold flex items-center space-x-1 shadow-md shadow-purple-600/30 transition active:scale-95">
+        <i data-lucide="play" class="w-3 h-3 fill-current"></i>
+        <span>Tour</span>
+      </button>
+
+      <div class="w-px h-4 bg-slate-700"></div>
+
+      <label class="text-[11px] text-slate-400 font-medium flex items-center space-x-1">
+        <i data-lucide="layers" class="w-3 h-3 text-cyan-400"></i>
+        <span>Tile:</span>
+      </label>
+      <select id="preset-select" class="bg-slate-900 text-[11px] text-slate-200 border border-slate-700 rounded-lg px-2 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer max-w-[190px] truncate">
+        <option value="sf_downtown_georef.tif" selected>SF Downtown (300m Skyscraper Towers)</option>
+        <option value="gamus_DC_03_26_rgb.jpg">GAMUS: DC Urban (LiDAR AGL)</option>
+        <option value="gamus_DC_05_28_rgb.jpg">GAMUS: Commercial High-Rise</option>
+        <option value="gamus_DC_05_30_rgb.jpg">GAMUS: Canopy & Residential</option>
+        <option value="sample_urban_georef.tif">Urban District (Delhi GeoTIFF)</option>
+        <option value="sample_hilly_georef.tif">Hilly Mountain (GeoTIFF)</option>
+        <option value="sample_drone_rgb.jpg">Optical Drone (Non-georef JPG)</option>
+      </select>
+
+      <div class="w-px h-4 bg-slate-700"></div>
+
+      <label class="text-[11px] text-slate-400 font-medium flex items-center space-x-1">
+        <i data-lucide="globe" class="w-3 h-3 text-emerald-400"></i>
+        <span>Base:</span>
+      </label>
+      <select id="dem-select" class="bg-slate-900 text-[11px] text-slate-200 border border-slate-700 rounded-lg px-2 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer max-w-[120px] truncate">
+        <option value="fabdem" selected>FABDEM v1.2</option>
+        <option value="copernicus">Copernicus 30m</option>
+      </select>
+
+      <button id="btn-upload-gcp" class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[11px] font-semibold px-2 py-1 rounded-lg flex items-center space-x-1 transition shadow-md shadow-emerald-600/20 active:scale-95" title="Upload Ground Control Points CSV [X, Y, Z]">
+        <i data-lucide="map-pin" class="w-3 h-3"></i>
+        <span>GCP</span>
+      </button>
+      <input type="file" id="gcp-file-input" class="hidden" accept=".csv,.txt" />
+
+      <button id="btn-upload" class="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-[11px] font-semibold px-2.5 py-1 rounded-lg flex items-center space-x-1 transition shadow-md shadow-cyan-600/20 active:scale-95">
+        <i data-lucide="upload-cloud" class="w-3 h-3"></i>
+        <span>Upload</span>
+      </button>
+      <input type="file" id="file-input" class="hidden" accept=".tif,.tiff,.png,.jpg,.jpeg" />
+    </div>
+  </header>
+
+
+  <!-- Floating Toggle Buttons (Visible when sidebars are collapsed) -->
+  <button id="btn-expand-left" class="hidden absolute top-[4.25rem] left-3 z-20 glass-panel px-2.5 py-1.5 rounded-xl text-xs font-bold text-cyan-400 hover:text-white border border-cyan-500/40 flex items-center space-x-1.5 shadow-xl transition active:scale-95 pointer-events-auto">
+    <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i>
+    <span>Controls</span>
+  </button>
+  <button id="btn-expand-right" class="hidden absolute top-[4.25rem] right-3 z-20 glass-panel px-2.5 py-1.5 rounded-xl text-xs font-bold text-emerald-400 hover:text-white border border-emerald-500/40 flex items-center space-x-1.5 shadow-xl transition active:scale-95 pointer-events-auto">
+    <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>
+    <span>ISRO HUD</span>
+  </button>
+
+  <!-- Left Floating Toolbar (Scrollable & Collapsible) -->
+  <aside id="left-sidebar" class="absolute top-[4.25rem] left-3 bottom-2.5 z-20 w-72 pointer-events-none flex flex-col transition-transform duration-300">
+    <div class="glass-panel rounded-2xl p-3 pointer-events-auto flex flex-col max-h-full overflow-y-auto space-y-2.5 shadow-2xl custom-scroll">
+
+      <!-- Header & Collapse Button -->
+      <div class="flex items-center justify-between pb-1.5 border-b border-slate-800">
+        <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
+          <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5 text-cyan-400"></i>
+          <span>Controls</span>
+        </span>
+        <div class="flex items-center space-x-1.5 min-w-0">
+          <span id="elevation-badge" class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 truncate max-w-[100px] whitespace-nowrap" title="Absolute DSM">Absolute DSM</span>
+          <button id="btn-collapse-left" class="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition flex-shrink-0" title="Minimize Controls">
+            <i data-lucide="chevron-left" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- 3D Surface Model Selection (AI Prediction vs Ground-Truth LiDAR) -->
+      <div class="p-2 rounded-xl bg-slate-900/70 border border-slate-800">
+        <div class="flex justify-between items-center text-[10px] text-slate-400 mb-1">
+          <span class="font-medium flex items-center space-x-1">
+            <i data-lucide="layers" class="w-3 h-3 text-cyan-400"></i>
+            <span>3D Surface:</span>
+          </span>
+          <span id="surface-indicator" class="text-[9px] px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-400 border border-cyan-800">AI Model</span>
+        </div>
+        <div class="grid grid-cols-2 gap-1.5 text-xs">
+          <button id="surface-pred" class="surface-btn active px-2 py-1 rounded-lg bg-cyan-600/30 border border-cyan-500/60 text-cyan-300 font-semibold text-center transition active:scale-95 text-[11px]">
+            Predicted DSM
+          </button>
+          <button id="surface-ref" class="surface-btn px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-400 font-semibold text-center transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-[11px]" title="Toggle USGS LiDAR reference surface when available">
+            LiDAR Reference
+          </button>
+        </div>
+      </div>
+
+      <!-- Visualization Modes -->
+      <div class="grid grid-cols-2 gap-1.5 text-xs font-medium">
+        <button data-mode="rgb" class="mode-btn active bg-cyan-600/30 border border-cyan-500/60 text-cyan-300 px-2.5 py-1.5 rounded-xl flex items-center space-x-1.5 transition text-[11px]">
+          <i data-lucide="image" class="w-3.5 h-3.5"></i>
+          <span>RGB Satellite</span>
+        </button>
+        <button data-mode="hypsometric" class="mode-btn bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300 px-2.5 py-1.5 rounded-xl flex items-center space-x-1.5 transition text-[11px]">
+          <i data-lucide="activity" class="w-3.5 h-3.5"></i>
+          <span>Elevation Ramp</span>
+        </button>
+        <button data-mode="slope" class="mode-btn bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300 px-2.5 py-1.5 rounded-xl flex items-center space-x-1.5 transition text-[11px]">
+          <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+          <span>Slope Analysis</span>
+        </button>
+        <button data-mode="confidence" class="mode-btn bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300 px-2.5 py-1.5 rounded-xl flex items-center space-x-1.5 transition text-[11px]">
+          <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+          <span>Confidence Map</span>
+        </button>
+      </div>
+
+      <!-- 3D Skyscraper Realism & Shading Overlays -->
+      <div class="pt-2 border-t border-slate-800 space-y-1.5 text-[11px]">
+        <div class="grid grid-cols-2 gap-1.5">
+          <label class="flex items-center space-x-1.5 cursor-pointer text-slate-300" title="Renders steep vertical building facades in shaded architectural grey">
+            <input type="checkbox" id="toggle-walls" checked class="rounded bg-slate-800 border-slate-700 text-cyan-500 focus:ring-0">
+            <span>Building Walls</span>
+          </label>
+          <label class="flex items-center space-x-1.5 cursor-pointer text-slate-300" title="Enables directional solar hill-shading on buildings and canyons">
+            <input type="checkbox" id="toggle-shading" checked class="rounded bg-slate-800 border-slate-700 text-cyan-500 focus:ring-0">
+            <span>Hill-Shading</span>
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-1.5">
+          <label class="flex items-center space-x-1.5 cursor-pointer text-slate-300" title="Renders procedural elevation isolines across topography">
+            <input type="checkbox" id="toggle-contours" class="rounded bg-slate-800 border-slate-700 text-cyan-500 focus:ring-0">
+            <span>Elevation Contours</span>
+          </label>
+          <label class="flex items-center space-x-1.5 cursor-pointer text-slate-300" title="Toggles 3D triangular wireframe grid">
+            <input type="checkbox" id="toggle-wireframe" class="rounded bg-slate-800 border-slate-700 text-cyan-500 focus:ring-0">
+            <span>Wireframe</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Elevation Exaggeration Slider -->
+      <div class="pt-2 border-t border-slate-800">
+        <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+          <span>Height Exaggeration</span>
+          <span id="exaggeration-val" class="text-cyan-400 font-mono font-bold">1.0x</span>
+        </div>
+        <input id="exaggeration-slider" type="range" min="0.5" max="3.0" step="0.1" value="1.0" class="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
+      </div>
+
+      <!-- Sun Azimuth / Solar Shadow Angle -->
+      <div class="pt-2 border-t border-slate-800">
+        <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+          <span class="flex items-center space-x-1">
+            <i data-lucide="sun" class="w-3 h-3 text-amber-400"></i>
+            <span>Solar Azimuth</span>
+          </span>
+          <span id="sun-val" class="text-amber-400 font-mono font-bold">135°</span>
+        </div>
+        <input id="sun-slider" type="range" min="0" max="360" step="5" value="135" class="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
+      </div>
+
+      <!-- Navigation Mode Toggle -->
+      <div class="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
+        <span class="text-slate-400 text-[11px]">Nav Mode:</span>
+        <div class="flex space-x-1">
+          <button id="nav-orbit" class="px-2 py-0.5 rounded-lg bg-cyan-600/40 text-cyan-300 font-medium border border-cyan-500/50 text-[11px]">Orbit</button>
+          <button id="nav-fly" class="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-400 font-medium hover:text-slate-200 text-[11px]">Fly (FPV)</button>
+        </div>
+      </div>
+
+      <!-- Active Probe & GIS Inspection -->
+      <div class="pt-2 border-t border-slate-800">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-1">
+            <i data-lucide="crosshair" class="w-3 h-3 text-amber-400"></i>
+            <span>Terrain Height Probe</span>
+          </span>
+          <button id="btn-profile" class="text-[9px] px-1.5 py-0.5 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 transition flex items-center space-x-1">
+            <i data-lucide="git-commit" class="w-2.5 h-2.5"></i>
+            <span>Transect</span>
+          </button>
+        </div>
+        <div class="space-y-1 text-[11px] bg-slate-900/60 p-2 rounded-xl border border-slate-800/80">
+          <div class="flex justify-between py-0.5 border-b border-slate-800/60">
+            <span class="text-slate-400">Elevation (Z):</span>
+            <span id="probe-elevation" class="font-mono text-emerald-400 font-bold">-- m</span>
+          </div>
+          <div class="flex justify-between py-0.5 border-b border-slate-800/60">
+            <span class="text-slate-400">Height (nDSM):</span>
+            <span id="probe-ndsm" class="font-mono text-cyan-400 font-bold">-- m</span>
+          </div>
+          <div class="flex justify-between py-0.5 border-b border-slate-800/60">
+            <span class="text-slate-400">Slope:</span>
+            <span id="probe-slope" class="font-mono text-amber-300">-- °</span>
+          </div>
+          <div id="gcp-badge-container" class="hidden flex justify-between py-0.5 border-b border-emerald-500/30 bg-emerald-950/30 px-1.5 rounded">
+            <span class="text-emerald-400 font-bold flex items-center space-x-1">
+              <i data-lucide="check-check" class="w-2.5 h-2.5"></i>
+              <span>GCP:</span>
+            </span>
+            <span id="gcp-status-text" class="font-mono text-emerald-300 font-bold text-[10px]">4 Pts</span>
+          </div>
+          <div class="flex justify-between py-0.5 text-[10px]">
+            <span class="text-slate-400">Coords:</span>
+            <span id="probe-coords" class="font-mono text-slate-300 truncate max-w-[140px]">Click terrain</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Export Deliverables -->
+      <div class="pt-2 border-t border-slate-800 flex items-center justify-between">
+        <span class="text-[11px] font-medium text-slate-300">Export:</span>
+        <div class="flex space-x-1.5">
+          <a id="download-geotiff" href="#" download class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-medium text-cyan-400 border border-slate-700 flex items-center space-x-1 transition active:scale-95">
+            <i data-lucide="download" class="w-3 h-3"></i>
+            <span>GeoTIFF</span>
+          </a>
+          <button id="btn-export-obj" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-medium text-slate-300 border border-slate-700 flex items-center space-x-1 transition active:scale-95">
+            <i data-lucide="box" class="w-3 h-3"></i>
+            <span>3D Mesh</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
+  <!-- Right Floating ISRO Evaluation & Validation HUD (Scrollable & Collapsible) -->
+  <aside id="right-sidebar" class="absolute top-[4.25rem] right-3 bottom-2.5 z-20 w-72 pointer-events-none flex flex-col transition-transform duration-300">
+    <div class="glass-panel rounded-2xl p-3 pointer-events-auto flex flex-col max-h-full overflow-y-auto space-y-2.5 shadow-2xl custom-scroll">
+
+      <div class="flex items-center justify-between pb-1.5 border-b border-slate-800">
+        <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
+          <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-400"></i>
+          <span>ISRO Benchmark HUD</span>
+        </span>
+        <div class="flex items-center space-x-1.5">
+          <button id="btn-run-eval" class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 transition active:scale-95">
+            Eval
+          </button>
+          <button id="btn-collapse-right" class="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition" title="Minimize Benchmark">
+            <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Key KPI Grid -->
+      <div class="grid grid-cols-3 gap-1.5">
+        <div class="glass-panel-subtle rounded-xl p-2 text-center">
+          <div class="text-[9px] uppercase text-slate-400 font-medium">MAE</div>
+          <div id="metric-mae" class="text-sm font-mono font-extrabold text-cyan-400">3.76m</div>
+          <div class="text-[8px] text-emerald-400">Sub-Meter</div>
+        </div>
+        <div class="glass-panel-subtle rounded-xl p-2 text-center">
+          <div class="text-[9px] uppercase text-slate-400 font-medium">RMSE</div>
+          <div id="metric-rmse" class="text-sm font-mono font-extrabold text-blue-400">4.88m</div>
+          <div class="text-[8px] text-slate-400">LiDAR Ref</div>
+        </div>
+        <div class="glass-panel-subtle rounded-xl p-2 text-center">
+          <div class="text-[9px] uppercase text-slate-400 font-medium">Corr (r)</div>
+          <div id="metric-corr" class="text-sm font-mono font-extrabold text-amber-400">0.877</div>
+          <div class="text-[8px] text-emerald-400">GAMUS r</div>
+        </div>
+      </div>
+
+      <!-- Baseline Comparison Table -->
+      <div class="text-[11px]">
+        <div class="text-[10px] font-semibold text-slate-300 mb-1 flex justify-between">
+          <span>Model Benchmark</span>
+          <span>MAE (m)</span>
+        </div>
+        <div class="space-y-1 text-[10px]">
+          <div class="flex justify-between py-0.5 px-1.5 rounded bg-slate-800/40 text-slate-400">
+            <span>Mean Guess Heuristic</span>
+            <span class="font-mono">5.07m</span>
+          </div>
+          <div class="flex justify-between py-0.5 px-1.5 rounded bg-slate-800/40 text-slate-400">
+            <span>Depth Anything V2 (Zero-shot)</span>
+            <span class="font-mono">4.01m</span>
+          </div>
+          <div class="flex justify-between py-0.5 px-1.5 rounded bg-cyan-950/40 border border-cyan-500/30 text-cyan-300 font-medium">
+            <span>DepthWizard (Our Solution)</span>
+            <span id="benchmark-score" class="font-mono font-bold">3.76m</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Per-Landscape Error Breakdown -->
+      <div class="pt-2 border-t border-slate-800 text-[11px]">
+        <div class="text-[10px] font-semibold text-slate-300 mb-1">Error by Landscape Category:</div>
+        <div class="space-y-1 text-[10px]">
+          <div class="flex items-center justify-between">
+            <span class="text-slate-400">Ground / Sparse (<1.5m):</span>
+            <span id="breakdown-ground" class="font-mono text-emerald-400 font-bold">0.85m</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-slate-400">Vegetation & Canopy:</span>
+            <span id="breakdown-veg" class="font-mono text-slate-200">2.14m</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-slate-400">Urban Buildings & Towers:</span>
+            <span id="breakdown-bldg" class="font-mono text-cyan-300 font-bold">4.82m</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Split-Screen LiDAR Wipe Toggle -->
+      <div class="pt-2 border-t border-slate-800">
+        <div class="flex items-center justify-between text-[11px]">
+          <span class="text-slate-300 font-medium">LiDAR Split Swipe:</span>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="toggle-lidar-wipe" class="sr-only peer">
+            <div class="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-cyan-600"></div>
+          </label>
+        </div>
+        <p class="text-[9px] text-slate-500 mt-0.5">Draggable slider compares prediction vs LiDAR.</p>
+      </div>
+
+      <!-- Flight Navigation Key Guide -->
+      <div id="fly-guide" class="hidden pt-2 border-t border-slate-800 text-[10px] space-y-1">
+        <div class="font-semibold text-cyan-300 flex items-center space-x-1 mb-1">
+          <i data-lucide="gamepad-2" class="w-3 h-3"></i>
+          <span>Drone Fly Controls</span>
+        </div>
+        <div class="grid grid-cols-2 gap-1 text-slate-400 text-[9px]">
+          <div><kbd class="px-1 py-0.5 rounded bg-slate-800 text-slate-200">W/S</kbd> Move Fwd/Back</div>
+          <div><kbd class="px-1 py-0.5 rounded bg-slate-800 text-slate-200">A/D</kbd> Strafe Left/Right</div>
+          <div><kbd class="px-1 py-0.5 rounded bg-slate-800 text-slate-200">Space</kbd> Ascend</div>
+          <div><kbd class="px-1 py-0.5 rounded bg-slate-800 text-slate-200">Shift</kbd> Descend</div>
+        </div>
+        <p class="text-[8px] text-slate-500">Click canvas to aim. Press ESC to release.</p>
+      </div>
+
+    </div>
+  </aside>
+
+  <!-- Bottom Interactive Color Legend -->
+  <div class="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+    <div class="glass-panel rounded-2xl px-5 py-2.5 pointer-events-auto flex items-center space-x-4 shadow-2xl">
+      <span id="legend-title" class="text-xs font-semibold text-slate-300">Elevation (m ASL)</span>
+      <div class="flex flex-col items-center">
+        <div id="legend-gradient" class="hypsometric-bar w-56 h-3 rounded-full shadow-inner"></div>
+        <div class="flex justify-between w-full text-[10px] font-mono text-slate-400 mt-1">
+          <span id="legend-min">140.0 m</span>
+          <span id="legend-mid">165.0 m</span>
+          <span id="legend-max">190.0 m</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Elevation Profile Cross-Section Panel (Opens when transect tool active) -->
+  <div id="profile-panel" class="hidden absolute bottom-20 left-1/2 -translate-x-1/2 z-20 w-[550px] glass-panel rounded-2xl p-4 pointer-events-auto shadow-2xl">
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center space-x-1.5">
+        <i data-lucide="line-chart" class="w-3.5 h-3.5 text-purple-400"></i>
+        <span>Elevation Transect Profile (Point A → Point B)</span>
+      </span>
+      <button id="btn-close-profile" class="text-slate-400 hover:text-white text-xs">✕</button>
+    </div>
+    <canvas id="profile-canvas" width="518" height="120" class="w-full h-28 bg-slate-950/80 rounded-xl border border-slate-800"></canvas>
+    <div class="flex justify-between text-[10px] text-slate-400 mt-1 font-mono">
+      <span>Point A (0 m)</span>
+      <span id="profile-distance">Distance: 150 m</span>
+      <span>Point B (End)</span>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="hidden absolute inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center space-y-4">
+    <div class="w-14 h-14 rounded-full border-4 border-cyan-500/20 border-t-cyan-500 animate-spin"></div>
+    <div class="text-center">
+      <h3 class="text-base font-bold text-white">Extracting Elevation Model...</h3>
+      <p class="text-xs text-slate-400 mt-1">Running Monocular Depth Backbone & Copernicus DEM Fusion</p>
+    </div>
+  </div>
+
+  <!-- Three.js, OrbitControls, PointerLockControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
+
+  <!-- Application Logic -->
+  <script>
+    lucide.createIcons();
+
+    // App State
+    const AppState = {
+      activeMode: "rgb",
+      navMode: "orbit",
+      exaggeration: 1.0,
+      sunAzimuth: 135,
+      showWireframe: false,
+      showContours: false,
+      showWalls: true,
+      showShading: true,
+      activeSurface: "prediction", // "prediction" or "reference"
+      isTouring: false,
+      isProfiling: false,
+      profilePoints: [],
+      wipeActive: false,
+      wipeX: window.innerWidth * 0.5,
+      currentData: null,
+      terrainMesh: null,
+      wireframeMesh: null,
+      pins: [],
+      transectLine: null,
+      heightGrid: [],
+      referenceGrid: null,
+      pixelSize: [1.0, 1.0],
+      viewScale: 1.0,
+      gridRows: 0,
+      gridCols: 0,
+      minHeight: 0,
+      maxHeight: 1,
+      textures: {
+        rgb: null,
+        dsm: null,
+        confidence: null,
+        lidar: null
+      }
+    };
+
+    let scene, camera, renderer, orbitControls, flyControls;
+    let sunLight, ambientLight;
+    let raycaster, mouse;
+    let terrainGeometry, terrainMaterial;
+    const canvasContainer = document.getElementById("canvas-container");
+
+    // Initialize 3D Engine
+    function init3D() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x070b14);
+      scene.fog = new THREE.FogExp2(0x070b14, 0.0025);
+
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 2500);
+      camera.position.set(0, 160, 220);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.15;
+      canvasContainer.appendChild(renderer.domElement);
+
+      // Controls
+      orbitControls = new THREE.OrbitControls(camera, renderer.domElement);
+      orbitControls.enableDamping = true;
+      orbitControls.dampingFactor = 0.05;
+      orbitControls.maxPolarAngle = Math.PI / 2 - 0.03;
+      orbitControls.minDistance = 15;
+      orbitControls.maxDistance = 800;
+
+      flyControls = new THREE.PointerLockControls(camera, document.body);
+      setupFlyNavigation();
+
+      // Atmospheric Lighting
+      ambientLight = new THREE.AmbientLight(0xddeeff, 0.65);
+      scene.add(ambientLight);
+
+      sunLight = new THREE.DirectionalLight(0xfff6ea, 1.4);
+      updateSunPosition(AppState.sunAzimuth);
+      sunLight.castShadow = true;
+      sunLight.shadow.mapSize.width = 2048;
+      sunLight.shadow.mapSize.height = 2048;
+      sunLight.shadow.camera.near = 10;
+      sunLight.shadow.camera.far = 600;
+      sunLight.shadow.camera.left = -150;
+      sunLight.shadow.camera.right = 150;
+      sunLight.shadow.camera.top = 150;
+      sunLight.shadow.camera.bottom = -150;
+      scene.add(sunLight);
+
+      // Soft Ground Reflection Grid
+      const gridHelper = new THREE.GridHelper(400, 40, 0x1e293b, 0x0f172a);
+      gridHelper.position.y = -1.0;
+      scene.add(gridHelper);
+
+      raycaster = new THREE.Raycaster();
+      mouse = new THREE.Vector2();
+
+      window.addEventListener("resize", onWindowResize);
+      renderer.domElement.addEventListener("mousemove", onMouseMove);
+      renderer.domElement.addEventListener("click", onTerrainClick);
+
+      setupWipeSlider();
+      animate();
+    }
+
+    function getSunLightVector(azimuthDeg) {
+      const rad = azimuthDeg * (Math.PI / 180);
+      return new THREE.Vector3(Math.cos(rad), 1.35, Math.sin(rad)).normalize();
+    }
+
+    function updateSunPosition(azimuthDeg) {
+      const rad = azimuthDeg * (Math.PI / 180);
+      const dist = 220;
+      const height = 180;
+      if (sunLight) {
+        sunLight.position.set(Math.cos(rad) * dist, height, Math.sin(rad) * dist);
+        sunLight.target.position.set(0, 0, 0);
+        sunLight.target.updateMatrixWorld();
+      }
+      if (terrainMaterial && terrainMaterial.uniforms && terrainMaterial.uniforms.uLight) {
+        terrainMaterial.uniforms.uLight.value.copy(getSunLightVector(azimuthDeg));
+      }
+    }
+
+    // Animation & Flight Telemetry Loop
+    let prevTime = performance.now();
+    let tourAngle = 0;
+    function animate() {
+      requestAnimationFrame(animate);
+      const time = performance.now();
+      const delta = (time - prevTime) / 1000;
+      prevTime = time;
+
+      if (AppState.isTouring) {
+        tourAngle += delta * 0.25;
+        const radius = 170;
+        const camH = 75 + Math.sin(tourAngle * 2) * 20;
+        camera.position.x = Math.sin(tourAngle) * radius;
+        camera.position.z = Math.cos(tourAngle) * radius;
+        camera.position.y = camH;
+        camera.lookAt(0, 15, 0);
+      } else if (AppState.navMode === "orbit") {
+        orbitControls.update();
+      } else if (AppState.navMode === "fly" && flyControls.isLocked) {
+        updateFlyMovement(delta);
+        updateTelemetryHUD();
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    function updateTelemetryHUD() {
+      // Heading
+      const dir = new THREE.Vector3();
+      camera.getWorldDirection(dir);
+      let angle = Math.atan2(dir.x, dir.z) * (180 / Math.PI);
+      if (angle < 0) angle += 360;
+      const cardinals = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+      const card = cardinals[Math.floor(((angle + 22.5) % 360) / 45)];
+      document.getElementById("hud-heading").textContent = `${Math.floor(angle).toString().padStart(3, '0')}° ${card}`;
+
+      // Altitude
+      const altASL = (AppState.minHeight + (camera.position.y / 35.0) * (AppState.maxHeight - AppState.minHeight)).toFixed(1);
+      document.getElementById("hud-altitude").textContent = `${altASL} m`;
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // Fly Navigation
+    const moveState = { forward: false, backward: false, left: false, right: false, up: false, down: false };
+    function setupFlyNavigation() {
+      document.addEventListener("keydown", (e) => {
+        if (!flyControls.isLocked) return;
+        switch(e.code) {
+          case "KeyW": moveState.forward = true; break;
+          case "KeyS": moveState.backward = true; break;
+          case "KeyA": moveState.left = true; break;
+          case "KeyD": moveState.right = true; break;
+          case "Space": moveState.up = true; break;
+          case "ShiftLeft": case "ShiftRight": moveState.down = true; break;
+        }
+      });
+      document.addEventListener("keyup", (e) => {
+        switch(e.code) {
+          case "KeyW": moveState.forward = false; break;
+          case "KeyS": moveState.backward = false; break;
+          case "KeyA": moveState.left = false; break;
+          case "KeyD": moveState.right = false; break;
+          case "Space": moveState.up = false; break;
+          case "ShiftLeft": case "ShiftRight": moveState.down = false; break;
+        }
+      });
+      flyControls.addEventListener("unlock", () => {
+        if (AppState.navMode === "fly") setNavMode("orbit");
+      });
+    }
+
+    function updateFlyMovement(delta) {
+      const speed = 65.0 * delta;
+      if (moveState.forward) flyControls.moveForward(speed);
+      if (moveState.backward) flyControls.moveForward(-speed);
+      if (moveState.right) flyControls.moveRight(speed);
+      if (moveState.left) flyControls.moveRight(-speed);
+      if (moveState.up) camera.position.y += speed;
+      if (moveState.down) camera.position.y = Math.max(camera.position.y - speed, 5);
+    }
+
+    function setNavMode(mode) {
+      AppState.navMode = mode;
+      const flyGuide = document.getElementById("fly-guide");
+      const flightHud = document.getElementById("flight-hud");
+      const btnOrbit = document.getElementById("nav-orbit");
+      const btnFly = document.getElementById("nav-fly");
+
+      if (mode === "fly") {
+        AppState.isTouring = false;
+        orbitControls.enabled = false;
+        flyControls.lock();
+        flyGuide.classList.remove("hidden");
+        flightHud.classList.remove("hidden");
+        btnFly.className = "px-2.5 py-1 rounded-lg bg-cyan-600/40 text-cyan-300 font-medium border border-cyan-500/50";
+        btnOrbit.className = "px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 font-medium hover:text-slate-200";
+      } else {
+        flyControls.unlock();
+        orbitControls.enabled = true;
+        flyGuide.classList.add("hidden");
+        flightHud.classList.add("hidden");
+        btnOrbit.className = "px-2.5 py-1 rounded-lg bg-cyan-600/40 text-cyan-300 font-medium border border-cyan-500/50";
+        btnFly.className = "px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 font-medium hover:text-slate-200";
+      }
+    }
+
+    // Build 3D Terrain with True Metric Scale & Architectural Skyscraper Shaders
+    function buildTerrain(data) {
+      AppState.currentData = data;
+      AppState.heightGrid = data.height_grid;
+      AppState.referenceGrid = data.reference_grid || null;
+      AppState.gridRows = data.grid_rows;
+      AppState.gridCols = data.grid_cols;
+      AppState.pixelSize = data.pixel_size || [1.0, 1.0];
+      const rows = data.grid_rows;
+      const cols = data.grid_cols;
+
+      AppState.minHeight = data.stats.min_elevation;
+      AppState.maxHeight = data.stats.max_elevation;
+
+      let shortBadge = "Absolute DSM";
+      if (data.elevation_type) {
+        if (data.elevation_type.includes("LiDAR")) shortBadge = "USGS LiDAR";
+        else if (data.elevation_type.includes("Relative") || data.elevation_type.includes("rDSM")) shortBadge = "Relative DSM";
+        else if (data.elevation_type.includes("FABDEM")) shortBadge = "FABDEM v1.2";
+        else if (data.elevation_type.includes("Copernicus")) shortBadge = "Copernicus 30m";
+      }
+      const elevBadgeEl = document.getElementById("elevation-badge");
+      if (elevBadgeEl) {
+        elevBadgeEl.textContent = shortBadge;
+        elevBadgeEl.title = data.elevation_type;
+      }
+      const gcpBadge = document.getElementById("gcp-badge-container");
+      const gcpText = document.getElementById("gcp-status-text");
+      if (data.gcp_stats && data.gcp_stats.gcp_count > 0) {
+        gcpBadge.classList.remove("hidden");
+        gcpText.textContent = `${data.gcp_stats.gcp_count} Pts | RMSE: ${data.gcp_stats.residual_rmse_after}m`;
+      } else {
+        gcpBadge.classList.add("hidden");
+      }
+
+      document.getElementById("legend-min").textContent = `${AppState.minHeight.toFixed(1)} m`;
+      document.getElementById("legend-mid").textContent = `${((AppState.minHeight + AppState.maxHeight)/2).toFixed(1)} m`;
+      document.getElementById("legend-max").textContent = `${AppState.maxHeight.toFixed(1)} m`;
+      document.getElementById("download-geotiff").href = data.geotiff_download_url;
+
+      // Update surface switcher state (enable/disable LiDAR reference)
+      const refBtn = document.getElementById("surface-ref");
+      const predBtn = document.getElementById("surface-pred");
+      if (refBtn && predBtn) {
+        if (AppState.referenceGrid) {
+          refBtn.disabled = false;
+          refBtn.classList.remove("opacity-40", "cursor-not-allowed");
+          refBtn.title = "Switch to USGS 3DEP LiDAR reference ground truth DSM";
+        } else {
+          refBtn.disabled = true;
+          refBtn.classList.add("opacity-40", "cursor-not-allowed");
+          refBtn.title = "No LiDAR reference file available for this scene";
+          if (AppState.activeSurface === "reference") {
+            AppState.activeSurface = "prediction";
+            predBtn.className = "surface-btn active px-2 py-1.5 rounded-lg bg-cyan-600/30 border border-cyan-500/60 text-cyan-300 font-semibold text-center transition active:scale-95";
+            refBtn.className = "surface-btn px-2 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-400 font-semibold text-center transition active:scale-95 opacity-40 cursor-not-allowed";
+            document.getElementById("surface-indicator").textContent = "AI Model";
+          }
+        }
+      }
+
+      if (AppState.terrainMesh) {
+        scene.remove(AppState.terrainMesh);
+        if (AppState.terrainMesh.geometry) AppState.terrainMesh.geometry.dispose();
+        if (AppState.terrainMesh.material) AppState.terrainMesh.material.dispose();
+      }
+      if (AppState.wireframeMesh) {
+        scene.remove(AppState.wireframeMesh);
+        if (AppState.wireframeMesh.material) AppState.wireframeMesh.material.dispose();
+      }
+      clearPins();
+
+      // Compute physical ground width and depth in meters from geospatial bounds
+      const groundW = (data.ground_width_m && data.ground_width_m > 10) 
+        ? data.ground_width_m 
+        : ((data.width || cols) * (AppState.pixelSize[0] || 1.0));
+      const groundH = (data.ground_height_m && data.ground_height_m > 10) 
+        ? data.ground_height_m 
+        : ((data.height || rows) * (AppState.pixelSize[1] || 1.0));
+      const maxGroundDim = Math.max(groundW, groundH, 1.0);
+
+      // Fit into standard viewer dimensions while strictly preserving true physical X:Z:Y aspect ratio
+      const targetDim = 220.0;
+      const viewScale = targetDim / maxGroundDim;
+      AppState.viewScale = viewScale;
+
+      const planeW = groundW * viewScale;
+      const planeH = groundH * viewScale;
+
+      terrainGeometry = new THREE.PlaneGeometry(planeW, planeH, cols - 1, rows - 1);
+      terrainGeometry.rotateX(-Math.PI / 2);
+
+      updateTerrainElevations();
+
+      const textureLoader = new THREE.TextureLoader();
+      AppState.textures.rgb = textureLoader.load(data.texture_url);
+      AppState.textures.dsm = textureLoader.load(data.dsm_preview_url);
+      AppState.textures.confidence = textureLoader.load(data.confidence_map_url);
+
+      // Custom Shader Material: renders crisp skyscraper facades on vertical building drops
+      // and casts directional solar hill-shading for sharp architectural contrast
+      terrainMaterial = new THREE.ShaderMaterial({
+        vertexShader: `
+          varying vec2 vUv;
+          varying vec3 vN;
+          varying vec3 vW;
+          void main() {
+            vUv = uv;
+            vN = normalize(normalMatrix * normal);
+            vec4 w = modelMatrix * vec4(position, 1.0);
+            vW = w.xyz;
+            gl_Position = projectionMatrix * viewMatrix * w;
+          }
+        `,
+        fragmentShader: `
+          uniform sampler2D uPhoto;
+          uniform sampler2D uOverlay;
+          uniform int uMode; // 0: photo, 1: overlay
+          uniform float uOpacity;
+          uniform float uShade;
+          uniform float uWalls;
+          uniform float uContours;
+          uniform float uContourStep;
+          uniform vec3 uLight;
+          uniform int uWipeActive;
+          uniform float uWipeX;
+
+          varying vec2 vUv;
+          varying vec3 vN;
+          varying vec3 vW;
+
+          void main() {
+            vec3 photoCol = texture2D(uPhoto, vUv).rgb;
+            vec3 dsmCol = texture2D(uOverlay, vUv).rgb;
+            vec3 col = photoCol;
+
+            if (uWipeActive > 0) {
+              // Interactive LiDAR Split Swipe:
+              // Left of divider: Optical Satellite Imagery; Right: Hypsometric LiDAR Elevation
+              if (gl_FragCoord.x >= uWipeX) {
+                col = dsmCol;
+              } else {
+                col = photoCol;
+              }
+            } else if (uMode > 0) {
+              col = mix(photoCol, dsmCol, uOpacity);
+            }
+            vec3 n = normalize(vN);
+            float lam = max(dot(n, normalize(uLight)), 0.0);
+            col *= mix(1.0, 0.45 + 0.75 * lam, uShade);
+
+            // Architectural building facades on steep vertical faces:
+            // Top-down satellite photo only has roof pixels here, so tint facades clean concrete/glass
+            float wall = smoothstep(0.48, 0.18, n.y) * uWalls;
+            vec3 wallColor = vec3(0.58, 0.60, 0.64) * (0.52 + 0.58 * lam);
+            col = mix(col, wallColor, wall);
+
+            // Procedural elevation contour lines
+            if (uContours > 0.5) {
+              float f = abs(fract(vW.y / uContourStep + 0.5) - 0.5) / max(fwidth(vW.y / uContourStep), 0.001);
+              col = mix(col, vec3(0.08, 0.12, 0.18), (1.0 - min(f, 1.0)) * 0.7);
+            }
+
+            gl_FragColor = vec4(col, 1.0);
+          }
+        `,
+        uniforms: {
+          uPhoto: { value: AppState.textures.rgb },
+          uOverlay: { value: AppState.textures.dsm },
+          uMode: { value: AppState.activeMode === "rgb" ? 0 : 1 },
+          uOpacity: { value: 0.8 },
+          uShade: { value: AppState.showShading ? 0.65 : 0.0 },
+          uWalls: { value: AppState.showWalls ? 1.0 : 0.0 },
+          uContours: { value: AppState.showContours ? 1.0 : 0.0 },
+          uContourStep: { value: Math.max(1.0, 10.0 * viewScale * AppState.exaggeration) },
+          uLight: { value: getSunLightVector(AppState.sunAzimuth) },
+          uWipeActive: { value: AppState.wipeActive ? 1 : 0 },
+          uWipeX: { value: AppState.wipeX || (window.innerWidth * 0.5) }
+        }
+      });
+
+      AppState.terrainMesh = new THREE.Mesh(terrainGeometry, terrainMaterial);
+      AppState.terrainMesh.receiveShadow = true;
+      AppState.terrainMesh.castShadow = true;
+      scene.add(AppState.terrainMesh);
+
+      // Wireframe overlay mesh
+      const wireframeMat = new THREE.MeshBasicMaterial({
+        color: 0x38bdf8,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.18
+      });
+      AppState.wireframeMesh = new THREE.Mesh(terrainGeometry, wireframeMat);
+      AppState.wireframeMesh.visible = AppState.showWireframe;
+      scene.add(AppState.wireframeMesh);
+
+      // Frame the scene with elevated isometric perspective
+      camera.position.set(0, 130, 185);
+      orbitControls.target.set(0, 25, 0);
+      orbitControls.update();
+    }
+
+    // Update vertex heights in real-time according to active surface & exaggeration
+    function updateTerrainElevations() {
+      if (!terrainGeometry) return;
+      const rows = AppState.gridRows;
+      const cols = AppState.gridCols;
+      if (!rows || !cols) return;
+      const pos = terrainGeometry.attributes.position;
+      const activeGrid = (AppState.activeSurface === "reference" && AppState.referenceGrid)
+        ? AppState.referenceGrid
+        : AppState.heightGrid;
+      if (!activeGrid) return;
+
+      // Compute robust ground datum (5th percentile of scene to align street level at 0)
+      let baseGround = AppState.minHeight;
+      if (activeGrid && activeGrid.length) {
+        const samples = [];
+        for (let r = 0; r < rows; r += 2) {
+          for (let c = 0; c < cols; c += 2) {
+            const v = activeGrid[r][c];
+            if (Number.isFinite(v)) samples.push(v);
+          }
+        }
+        if (samples.length) {
+          samples.sort((a, b) => a - b);
+          baseGround = samples[Math.floor(samples.length * 0.05)];
+        }
+      }
+      const viewScale = AppState.viewScale || 1.0;
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const idx = r * cols + c;
+          const hVal = activeGrid[r][c];
+          // True metric displacement: (meters above ground datum) * viewScale * exaggeration
+          const scaledH = Math.max(0.0, (hVal - baseGround)) * viewScale * AppState.exaggeration;
+          pos.setY(idx, scaledH);
+        }
+      }
+      pos.needsUpdate = true;
+      terrainGeometry.computeVertexNormals();
+
+      if (terrainMaterial && terrainMaterial.uniforms && terrainMaterial.uniforms.uContourStep) {
+        terrainMaterial.uniforms.uContourStep.value = Math.max(1.0, 10.0 * viewScale * AppState.exaggeration);
+      }
+    }
+
+    function updateHeightExaggeration() {
+      updateTerrainElevations();
+    }
+
+
+    // Visualization Modes
+    function setVisualizationMode(mode) {
+      AppState.activeMode = mode;
+      document.querySelectorAll(".mode-btn").forEach(btn => {
+        if (btn.dataset.mode === mode) {
+          btn.className = "mode-btn active bg-cyan-600/30 border border-cyan-500/60 text-cyan-300 px-3 py-2 rounded-xl flex items-center space-x-2 transition";
+        } else {
+          btn.className = "mode-btn bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300 px-3 py-2 rounded-xl flex items-center space-x-2 transition";
+        }
+      });
+
+      const legendGradient = document.getElementById("legend-gradient");
+      const legendTitle = document.getElementById("legend-title");
+      if (!terrainMaterial || !terrainMaterial.uniforms) return;
+
+      if (mode === "rgb") {
+        terrainMaterial.uniforms.uMode.value = 0;
+        legendGradient.className = "hypsometric-bar w-56 h-3 rounded-full shadow-inner";
+        legendTitle.textContent = "Elevation (m ASL)";
+      } else if (mode === "hypsometric") {
+        terrainMaterial.uniforms.uMode.value = 1;
+        terrainMaterial.uniforms.uOverlay.value = AppState.textures.dsm;
+        terrainMaterial.uniforms.uOpacity.value = 0.82;
+        legendGradient.className = "hypsometric-bar w-56 h-3 rounded-full shadow-inner";
+        legendTitle.textContent = "Hypsometric Elevation (m)";
+      } else if (mode === "confidence") {
+        terrainMaterial.uniforms.uMode.value = 1;
+        terrainMaterial.uniforms.uOverlay.value = AppState.textures.confidence;
+        terrainMaterial.uniforms.uOpacity.value = 0.85;
+        legendGradient.className = "w-56 h-3 rounded-full shadow-inner bg-gradient-to-r from-red-500 to-emerald-400";
+        legendTitle.textContent = "Model Confidence (0 to 1)";
+        document.getElementById("legend-min").textContent = "0.0 (Uncertain)";
+        document.getElementById("legend-mid").textContent = "0.5";
+        document.getElementById("legend-max").textContent = "1.0 (Certain)";
+      } else if (mode === "slope") {
+        terrainMaterial.uniforms.uMode.value = 1;
+        terrainMaterial.uniforms.uOverlay.value = AppState.textures.dsm;
+        terrainMaterial.uniforms.uOpacity.value = 0.75;
+        legendGradient.className = "slope-bar w-56 h-3 rounded-full shadow-inner";
+        legendTitle.textContent = "Terrain Slope (°)";
+        document.getElementById("legend-min").textContent = "0° (Flat)";
+        document.getElementById("legend-mid").textContent = "25°";
+        document.getElementById("legend-max").textContent = "50°+ (Steep)";
+      }
+    }
+
+    // Height Probe
+    function onMouseMove(event) {
+      if (!AppState.terrainMesh || AppState.navMode === "fly") return;
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObject(AppState.terrainMesh);
+
+      if (intersects.length > 0) {
+        const hit = intersects[0];
+        const uv = hit.uv;
+        if (uv && AppState.heightGrid.length > 0) {
+          const rows = AppState.heightGrid.length;
+          const cols = AppState.heightGrid[0].length;
+          const r = Math.min(Math.floor((1.0 - uv.y) * rows), rows - 1);
+          const c = Math.min(Math.floor(uv.x * cols), cols - 1);
+
+          const elevation = AppState.heightGrid[r][c];
+          const ndsm = Math.max(0, elevation - AppState.minHeight);
+
+          const normal = hit.face.normal;
+          const slopeRad = Math.acos(Math.min(1.0, normal.y));
+          const slopeDeg = (slopeRad * 180 / Math.PI).toFixed(1);
+
+          document.getElementById("probe-elevation").textContent = `${elevation.toFixed(1)} m`;
+          document.getElementById("probe-ndsm").textContent = `${ndsm.toFixed(1)} m`;
+          document.getElementById("probe-slope").textContent = `${slopeDeg} °`;
+
+          if (AppState.currentData && AppState.currentData.bounds) {
+            const b = AppState.currentData.bounds;
+            const lon = (b[0] + uv.x * (b[2] - b[0])).toFixed(5);
+            const lat = (b[1] + (1 - uv.y) * (b[3] - b[1])).toFixed(5);
+            document.getElementById("probe-coords").textContent = `${lat}°N, ${lon}°E`;
+          } else {
+            document.getElementById("probe-coords").textContent = `X: ${c}, Y: ${r} px`;
+          }
+        }
+      }
+    }
+
+    // Pin Drop & Transect Profile
+    function onTerrainClick(event) {
+      if (!AppState.terrainMesh || AppState.navMode === "fly" || AppState.isWipeDragging) return;
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObject(AppState.terrainMesh);
+      if (intersects.length === 0) return;
+
+      const hit = intersects[0];
+      const point = hit.point;
+
+      if (AppState.isProfiling) {
+        // Transect line tool
+        AppState.profilePoints.push(point);
+        dropPin(point, `Pt ${AppState.profilePoints.length === 1 ? 'A' : 'B'}`);
+
+        if (AppState.profilePoints.length === 2) {
+          drawTransectLine(AppState.profilePoints[0], AppState.profilePoints[1]);
+          computeElevationProfile(AppState.profilePoints[0], AppState.profilePoints[1]);
+          AppState.isProfiling = false;
+          document.getElementById("btn-profile").className = "text-[10px] px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 transition flex items-center space-x-1";
+        }
+      } else {
+        // Drop single measurement pin
+        dropPin(point, `${document.getElementById("probe-elevation").textContent}`);
+      }
+    }
+
+    function dropPin(position, labelText) {
+      const pinGeom = new THREE.ConeGeometry(1.2, 5.0, 16);
+      pinGeom.translate(0, 2.5, 0);
+      pinGeom.rotateX(Math.PI);
+      const pinMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7 });
+      const pin = new THREE.Mesh(pinGeom, pinMat);
+      pin.position.copy(position);
+      pin.position.y += 5.0;
+      scene.add(pin);
+      AppState.pins.push(pin);
+    }
+
+    function clearPins() {
+      AppState.pins.forEach(p => scene.remove(p));
+      AppState.pins = [];
+      if (AppState.transectLine) scene.remove(AppState.transectLine);
+      AppState.transectLine = null;
+      AppState.profilePoints = [];
+    }
+
+    function drawTransectLine(p1, p2) {
+      if (AppState.transectLine) scene.remove(AppState.transectLine);
+      const points = [p1.clone().add(new THREE.Vector3(0, 0.5, 0)), p2.clone().add(new THREE.Vector3(0, 0.5, 0))];
+      const geom = new THREE.BufferGeometry().setFromPoints(points);
+      const mat = new THREE.LineBasicMaterial({ color: 0xc084fc, linewidth: 3 });
+      AppState.transectLine = new THREE.Line(geom, mat);
+      scene.add(AppState.transectLine);
+    }
+
+    // 2D Elevation Cross-Section Canvas
+    function computeElevationProfile(p1, p2) {
+      const canvas = document.getElementById("profile-canvas");
+      const ctx = canvas.getContext("2d");
+      const W = canvas.width;
+      const H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+
+      const numSamples = 60;
+      const heights = [];
+      const rows = AppState.heightGrid.length;
+      const cols = AppState.heightGrid[0].length;
+
+      for (let i = 0; i <= numSamples; i++) {
+        const t = i / numSamples;
+        const x = p1.x + t * (p2.x - p1.x);
+        const z = p1.z + t * (p2.z - p1.z);
+
+        // Map world x,z (-100 to 100) to grid coordinates
+        const u = Math.min(Math.max((x + 100) / 200, 0), 1);
+        const v = Math.min(Math.max((z + 100) / 200, 0), 1);
+        const r = Math.min(Math.floor(v * rows), rows - 1);
+        const c = Math.min(Math.floor(u * cols), cols - 1);
+        heights.push(AppState.heightGrid[r][c]);
+      }
+
+      const minH = Math.min(...heights);
+      const maxH = Math.max(...heights);
+      const span = maxH - minH || 1.0;
+
+      // Draw Grid lines
+      ctx.strokeStyle = "rgba(51, 65, 85, 0.4)";
+      ctx.lineWidth = 1;
+      for (let y = 20; y < H; y += 25) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(W, y);
+        ctx.stroke();
+      }
+
+      // Draw Gradient Profile Area
+      const grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, "rgba(192, 132, 252, 0.4)");
+      grad.addColorStop(1, "rgba(56, 189, 248, 0.05)");
+
+      ctx.beginPath();
+      ctx.moveTo(0, H);
+      for (let i = 0; i <= numSamples; i++) {
+        const px = (i / numSamples) * W;
+        const py = H - 10 - ((heights[i] - minH) / span) * (H - 25);
+        ctx.lineTo(px, py);
+      }
+      ctx.lineTo(W, H);
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Stroke Line
+      ctx.beginPath();
+      for (let i = 0; i <= numSamples; i++) {
+        const px = (i / numSamples) * W;
+        const py = H - 10 - ((heights[i] - minH) / span) * (H - 25);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = "#c084fc";
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      // Distance calculation
+      const distMeters = Math.round(p1.distanceTo(p2) * 1.5);
+      document.getElementById("profile-distance").textContent = `Distance: ${distMeters} m | Min: ${minH.toFixed(1)}m | Max: ${maxH.toFixed(1)}m`;
+      document.getElementById("profile-panel").classList.remove("hidden");
+    }
+
+    // Split-Screen Wipe Slider Logic
+    function setupWipeSlider() {
+      const divider = document.getElementById("wipe-divider");
+      let isDragging = false;
+
+      divider.addEventListener("mousedown", (e) => {
+        isDragging = true;
+        AppState.isWipeDragging = true;
+        e.preventDefault();
+        e.stopPropagation();
+      });
+
+      window.addEventListener("mouseup", () => {
+        if (isDragging) {
+          isDragging = false;
+          setTimeout(() => { AppState.isWipeDragging = false; }, 80);
+        }
+      });
+
+      window.addEventListener("mousemove", (e) => {
+        if (!isDragging || !AppState.wipeActive) return;
+        const x = Math.max(50, Math.min(window.innerWidth - 50, e.clientX));
+        divider.style.left = `${x}px`;
+        AppState.wipeX = x;
+        const dpr = (renderer && renderer.getPixelRatio) ? renderer.getPixelRatio() : 1.0;
+        if (terrainMaterial && terrainMaterial.uniforms && terrainMaterial.uniforms.uWipeX) {
+          terrainMaterial.uniforms.uWipeX.value = x * dpr;
+        }
+      });
+
+      // Touch screen support
+      divider.addEventListener("touchstart", (e) => {
+        isDragging = true;
+        AppState.isWipeDragging = true;
+      }, { passive: true });
+
+      window.addEventListener("touchend", () => {
+        if (isDragging) {
+          isDragging = false;
+          setTimeout(() => { AppState.isWipeDragging = false; }, 80);
+        }
+      });
+
+      window.addEventListener("touchmove", (e) => {
+        if (!isDragging || !AppState.wipeActive || !e.touches.length) return;
+        const x = Math.max(50, Math.min(window.innerWidth - 50, e.touches[0].clientX));
+        divider.style.left = `${x}px`;
+        AppState.wipeX = x;
+        const dpr = (renderer && renderer.getPixelRatio) ? renderer.getPixelRatio() : 1.0;
+        if (terrainMaterial && terrainMaterial.uniforms && terrainMaterial.uniforms.uWipeX) {
+          terrainMaterial.uniforms.uWipeX.value = x * dpr;
+        }
+      });
+    }
+
+    let currentGcpFile = null;
+
+    // API Pipeline Calls
+    async function loadPreset(presetName, gcpFile = null) {
+      document.getElementById("loading-overlay").classList.remove("hidden");
+      try {
+        const formData = new FormData();
+        formData.append("preset", presetName);
+        const demSource = document.getElementById("dem-select") ? document.getElementById("dem-select").value : "fabdem";
+        formData.append("dem_source", demSource);
+        const gcpToUse = gcpFile || currentGcpFile;
+        if (gcpToUse) {
+          formData.append("gcp_file", gcpToUse);
+        }
+        const res = await fetch("/api/process", { method: "POST", body: formData });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const data = await res.json();
+        if (!data.success) throw new Error(data.detail || "API returned error");
+        buildTerrain(data);
+      } catch (err) {
+        console.error("Failed to load preset:", err);
+        alert("Scene loading failed: " + err.message);
+      } finally {
+        document.getElementById("loading-overlay").classList.add("hidden");
+      }
+    }
+
+    async function handleFileUpload(file, gcpFile = null) {
+      document.getElementById("loading-overlay").classList.remove("hidden");
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const demSource = document.getElementById("dem-select") ? document.getElementById("dem-select").value : "fabdem";
+        formData.append("dem_source", demSource);
+        const gcpToUse = gcpFile || currentGcpFile;
+        if (gcpToUse) {
+          formData.append("gcp_file", gcpToUse);
+        }
+        const res = await fetch("/api/process", { method: "POST", body: formData });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const data = await res.json();
+        if (!data.success) throw new Error(data.detail || "API returned error");
+        buildTerrain(data);
+      } catch (err) {
+        console.error("Failed to process uploaded file:", err);
+        alert("Upload processing failed: " + err.message);
+      } finally {
+        document.getElementById("loading-overlay").classList.add("hidden");
+      }
+    }
+
+    async function runBenchmarkEvaluation() {
+      try {
+        const formData = new FormData();
+        if (AppState.currentData && AppState.currentData.task_id) {
+          formData.append("task_id", AppState.currentData.task_id);
+        }
+        const res = await fetch("/api/evaluate", { method: "POST", body: formData });
+        const data = await res.json();
+        document.getElementById("metric-mae").textContent = `${data.mae}m`;
+        document.getElementById("metric-rmse").textContent = `${data.rmse}m`;
+        document.getElementById("metric-corr").textContent = `${data.correlation}`;
+        document.getElementById("benchmark-score").textContent = `${data.mae}m`;
+
+        if (data.breakdown.urban_buildings) {
+          document.getElementById("breakdown-bldg").textContent = `MAE: ${data.breakdown.urban_buildings.mae}m`;
+        }
+        if (data.breakdown.vegetation_trees) {
+          document.getElementById("breakdown-veg").textContent = `MAE: ${data.breakdown.vegetation_trees.mae}m`;
+        }
+        if (data.breakdown.ground_sparse) {
+          document.getElementById("breakdown-ground").textContent = `MAE: ${data.breakdown.ground_sparse.mae}m`;
+        }
+      } catch (err) {
+        console.error("Evaluation failed:", err);
+      }
+    }
+
+    // Event Listeners
+    document.querySelectorAll(".mode-btn").forEach(btn => {
+      btn.addEventListener("click", () => setVisualizationMode(btn.dataset.mode));
+    });
+
+    document.getElementById("preset-select").addEventListener("change", (e) => {
+      loadPreset(e.target.value);
+    });
+
+    document.getElementById("btn-upload").addEventListener("click", () => {
+      document.getElementById("file-input").click();
+    });
+
+    document.getElementById("file-input").addEventListener("change", (e) => {
+      if (e.target.files.length > 0) handleFileUpload(e.target.files[0]);
+    });
+
+    document.getElementById("btn-upload-gcp").addEventListener("click", () => {
+      document.getElementById("gcp-file-input").click();
+    });
+
+    document.getElementById("gcp-file-input").addEventListener("change", (e) => {
+      if (e.target.files.length > 0) {
+        currentGcpFile = e.target.files[0];
+        const activePreset = document.getElementById("preset-select").value;
+        loadPreset(activePreset, currentGcpFile);
+      }
+    });
+
+    document.getElementById("dem-select").addEventListener("change", () => {
+      const activePreset = document.getElementById("preset-select").value;
+      loadPreset(activePreset, currentGcpFile);
+    });
+
+
+    document.getElementById("exaggeration-slider").addEventListener("input", (e) => {
+      AppState.exaggeration = parseFloat(e.target.value);
+      document.getElementById("exaggeration-val").textContent = `${AppState.exaggeration.toFixed(1)}x`;
+      updateHeightExaggeration();
+    });
+
+
+    document.getElementById("sun-slider").addEventListener("input", (e) => {
+      AppState.sunAzimuth = parseInt(e.target.value);
+      document.getElementById("sun-val").textContent = `${AppState.sunAzimuth}°`;
+      updateSunPosition(AppState.sunAzimuth);
+    });
+
+    document.getElementById("toggle-wireframe").addEventListener("change", (e) => {
+      AppState.showWireframe = e.target.checked;
+      if (AppState.wireframeMesh) AppState.wireframeMesh.visible = AppState.showWireframe;
+    });
+
+    const toggleWalls = document.getElementById("toggle-walls");
+    if (toggleWalls) {
+      toggleWalls.addEventListener("change", (e) => {
+        AppState.showWalls = e.target.checked;
+        if (terrainMaterial && terrainMaterial.uniforms && terrainMaterial.uniforms.uWalls) {
+          terrainMaterial.uniforms.uWalls.value = AppState.showWalls ? 1.0 : 0.0;
+        }
+      });
+    }
+
+    const toggleShading = document.getElementById("toggle-shading");
+    if (toggleShading) {
+      toggleShading.addEventListener("change", (e) => {
+        AppState.showShading = e.target.checked;
+        if (terrainMaterial && terrainMaterial.uniforms && terrainMaterial.uniforms.uShade) {
+          terrainMaterial.uniforms.uShade.value = AppState.showShading ? 0.65 : 0.0;
+        }
+      });
+    }
+
+    document.getElementById("toggle-contours").addEventListener("change", (e) => {
+      AppState.showContours = e.target.checked;
+      if (terrainMaterial && terrainMaterial.uniforms && terrainMaterial.uniforms.uContours) {
+        terrainMaterial.uniforms.uContours.value = AppState.showContours ? 1.0 : 0.0;
+      }
+    });
+
+    // Surface Switcher (AI Prediction vs Ground Truth LiDAR)
+    const surfacePred = document.getElementById("surface-pred");
+    const surfaceRef = document.getElementById("surface-ref");
+    if (surfacePred && surfaceRef) {
+      surfacePred.addEventListener("click", () => {
+        AppState.activeSurface = "prediction";
+        surfacePred.className = "surface-btn active px-2 py-1.5 rounded-lg bg-cyan-600/30 border border-cyan-500/60 text-cyan-300 font-semibold text-center transition active:scale-95";
+        surfaceRef.className = "surface-btn px-2 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-400 font-semibold text-center transition active:scale-95";
+        document.getElementById("surface-indicator").textContent = "AI Model";
+        updateTerrainElevations();
+      });
+
+      surfaceRef.addEventListener("click", () => {
+        if (!AppState.referenceGrid) return;
+        AppState.activeSurface = "reference";
+        surfaceRef.className = "surface-btn active px-2 py-1.5 rounded-lg bg-cyan-600/30 border border-cyan-500/60 text-cyan-300 font-semibold text-center transition active:scale-95";
+        surfacePred.className = "surface-btn px-2 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-400 font-semibold text-center transition active:scale-95";
+        document.getElementById("surface-indicator").textContent = "USGS LiDAR";
+        updateTerrainElevations();
+      });
+    }
+
+    document.getElementById("btn-tour").addEventListener("click", () => {
+      AppState.isTouring = !AppState.isTouring;
+      const btn = document.getElementById("btn-tour");
+      if (AppState.isTouring) {
+        btn.innerHTML = `<i data-lucide="pause" class="w-3.5 h-3.5 fill-current"></i><span>Pause Tour</span>`;
+        orbitControls.enabled = false;
+      } else {
+        btn.innerHTML = `<i data-lucide="play" class="w-3.5 h-3.5 fill-current"></i><span>Flythrough Tour</span>`;
+        orbitControls.enabled = true;
+      }
+      lucide.createIcons();
+    });
+
+    document.getElementById("btn-profile").addEventListener("click", () => {
+      AppState.isProfiling = !AppState.isProfiling;
+      clearPins();
+      const btn = document.getElementById("btn-profile");
+      if (AppState.isProfiling) {
+        btn.className = "text-[10px] px-2 py-0.5 rounded-md bg-purple-500 text-white font-bold border border-purple-400 transition flex items-center space-x-1";
+      } else {
+        btn.className = "text-[10px] px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 transition flex items-center space-x-1";
+      }
+    });
+
+    document.getElementById("btn-close-profile").addEventListener("click", () => {
+      document.getElementById("profile-panel").classList.add("hidden");
+      clearPins();
+    });
+
+    document.getElementById("toggle-lidar-wipe").addEventListener("change", (e) => {
+      AppState.wipeActive = e.target.checked;
+      const divider = document.getElementById("wipe-divider");
+      if (AppState.wipeActive) {
+        divider.classList.remove("hidden");
+        const initX = window.innerWidth * 0.5;
+        divider.style.left = `${initX}px`;
+        AppState.wipeX = initX;
+        lucide.createIcons();
+        const dpr = (renderer && renderer.getPixelRatio) ? renderer.getPixelRatio() : 1.0;
+        if (terrainMaterial && terrainMaterial.uniforms) {
+          terrainMaterial.uniforms.uWipeActive.value = 1;
+          terrainMaterial.uniforms.uWipeX.value = initX * dpr;
+          terrainMaterial.uniforms.uOverlay.value = AppState.textures.dsm;
+        }
+      } else {
+        divider.classList.add("hidden");
+        if (terrainMaterial && terrainMaterial.uniforms) {
+          terrainMaterial.uniforms.uWipeActive.value = 0;
+        }
+      }
+    });
+
+    document.getElementById("nav-orbit").addEventListener("click", () => setNavMode("orbit"));
+    document.getElementById("nav-fly").addEventListener("click", () => setNavMode("fly"));
+    document.getElementById("btn-run-eval").addEventListener("click", runBenchmarkEvaluation);
+
+    // Sidebar Collapsing Logic
+    const leftSidebar = document.getElementById("left-sidebar");
+    const rightSidebar = document.getElementById("right-sidebar");
+    const btnCollapseLeft = document.getElementById("btn-collapse-left");
+    const btnExpandLeft = document.getElementById("btn-expand-left");
+    const btnCollapseRight = document.getElementById("btn-collapse-right");
+    const btnExpandRight = document.getElementById("btn-expand-right");
+
+    if (btnCollapseLeft && btnExpandLeft) {
+      btnCollapseLeft.addEventListener("click", () => {
+        leftSidebar.classList.add("-translate-x-[120%]");
+        btnExpandLeft.classList.remove("hidden");
+      });
+      btnExpandLeft.addEventListener("click", () => {
+        leftSidebar.classList.remove("-translate-x-[120%]");
+        btnExpandLeft.classList.add("hidden");
+      });
+    }
+
+    if (btnCollapseRight && btnExpandRight) {
+      btnCollapseRight.addEventListener("click", () => {
+        rightSidebar.classList.add("translate-x-[120%]");
+        btnExpandRight.classList.remove("hidden");
+      });
+      btnExpandRight.addEventListener("click", () => {
+        rightSidebar.classList.remove("translate-x-[120%]");
+        btnExpandRight.classList.add("hidden");
+      });
+    }
+
+    // 3D OBJ Export
+    document.getElementById("btn-export-obj").addEventListener("click", () => {
+      if (!AppState.terrainMesh) return;
+      let objData = "# DepthWizard 3D Terrain Model\n";
+      const pos = terrainGeometry.attributes.position;
+      const uvs = terrainGeometry.attributes.uv;
+
+      for (let i = 0; i < pos.count; i++) {
+        objData += `v ${pos.getX(i).toFixed(3)} ${pos.getY(i).toFixed(3)} ${pos.getZ(i).toFixed(3)}\n`;
+      }
+      for (let i = 0; i < uvs.count; i++) {
+        objData += `vt ${uvs.getX(i).toFixed(4)} ${uvs.getY(i).toFixed(4)}\n`;
+      }
+      const index = terrainGeometry.index;
+      if (index) {
+        for (let i = 0; i < index.count; i += 3) {
+          const a = index.getX(i) + 1;
+          const b = index.getX(i+1) + 1;
+          const c = index.getX(i+2) + 1;
+          objData += `f ${a}/${a} ${b}/${b} ${c}/${c}\n`;
+        }
+      }
+      const blob = new Blob([objData], { type: "text/plain" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "terrain_mesh.obj";
+      link.click();
+    });
+
+    // Keyboard Shortcuts
+    window.addEventListener("keydown", (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+      if (e.key === "1") setVisualizationMode("rgb");
+      if (e.key === "2") setVisualizationMode("hypsometric");
+      if (e.key === "3") setVisualizationMode("slope");
+      if (e.key === "4") setVisualizationMode("confidence");
+      if (e.key.toLowerCase() === "f") setNavMode(AppState.navMode === "fly" ? "orbit" : "fly");
+      if (e.key.toLowerCase() === "t") document.getElementById("btn-tour").click();
+    });
+
+    // Start App with default San Francisco Downtown skyscraper tile
+    init3D();
+    loadPreset("sf_downtown_georef.tif");
+  </script>
+</body>
+</html>

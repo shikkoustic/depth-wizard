@@ -1,0 +1,17 @@
+{
+  "id": "manangarg7/depthwizard-gamus-finetune",
+  "title": "DepthWizard GAMUS FineTune",
+  "code_file": "depthwizard_gamus_finetune.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "aishwk/gamus-remote-sensing-dataset",
+    "aishwk/gamus-subset-5gb",
+    "asterlu/depth-anything-v2-base"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}
