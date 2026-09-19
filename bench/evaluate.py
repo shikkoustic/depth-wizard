@@ -46,15 +46,20 @@ def main():
     ap.add_argument("--sites", default="")
     ap.add_argument("--out", default="runs/bench")
     ap.add_argument("--tta", type=int, default=4)
+    ap.add_argument("--reuse", action="store_true", help="reuse existing scene outputs (skip inference)")
     a = ap.parse_args()
     root = os.path.join(os.path.dirname(__file__), "sites")
     names = a.sites.split(",") if a.sites else sorted(os.path.basename(d) for d in glob.glob(f"{root}/*") if os.path.exists(f"{d}/site.json"))
-    results = {}
+    rp = f"{a.out}/bench_results.json"
+    results = json.load(open(rp)) if os.path.exists(rp) else {}  # merge: re-running some sites keeps the others
     for name in names:
         d = f"{root}/{name}"; site = json.load(open(f"{d}/site.json"))
         scene = f"{a.out}/scenes/{name}"
-        rep = process(f"{d}/naip.tif", scene, reference=f"{d}/lidar_dsm.tif", title=f"{name} ({site.get('terrain', '')})",
-                      progress=lambda m: None, n_tta=a.tta)
+        if a.reuse and os.path.exists(f"{scene}/report.json"):
+            rep = json.load(open(f"{scene}/report.json"))
+        else:
+            rep = process(f"{d}/naip.tif", scene, reference=f"{d}/lidar_dsm.tif", title=f"{name} ({site.get('terrain', '')})",
+                          progress=lambda m: None, n_tta=a.tta)
         with rasterio.open(f"{d}/lidar_dsm.tif") as ref:
             L_dsm = ref.read(1, masked=True).filled(np.nan).astype(np.float32)
             ours = onto(f"{scene}/dsm.tif", ref); nd = onto(f"{scene}/ndsm.tif", ref); dtm_used = onto(f"{scene}/dtm.tif", ref)
@@ -92,7 +97,7 @@ def main():
         results[name] = r
         print(name, json.dumps({k: {m: (v or {}).get("rmse") for m, v in r[k].items()} for k in ("raw", "datum_aligned")}), flush=True)
         os.makedirs(a.out, exist_ok=True)
-        json.dump(results, open(f"{a.out}/bench_results.json", "w"), indent=1)
+        json.dump(results, open(rp, "w"), indent=1)
 
 
 if __name__ == "__main__":

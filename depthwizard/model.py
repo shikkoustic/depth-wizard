@@ -43,7 +43,6 @@ class HeightModel:
         # CPU by default: predictable memory on small machines (set DEPTHWIZARD_DEVICE=mps/cuda to override)
         self.device = device or os.environ.get("DEPTHWIZARD_DEVICE") or ("cuda" if torch.cuda.is_available() else "cpu")
         torch.set_num_threads(threads or int(os.environ.get("DEPTHWIZARD_THREADS", "4")))
-        repo = f"depth-anything/Depth-Anything-V2-{variant}-hf"
         weights = weights or DEFAULT_WEIGHTS
         if not os.path.exists(weights):
             try:
@@ -51,9 +50,15 @@ class HeightModel:
             except Exception as e:
                 raise FileNotFoundError(f"model weights not found at {weights} and download from {WEIGHTS_URL} failed "
                                         f"({type(e).__name__}: {e}); pass --weights or set DEPTHWIZARD_WEIGHTS") from e
-        cfg = AutoConfig.from_pretrained(repo)
+        ck = torch.load(weights, map_location="cpu")
+        # newer checkpoints carry metadata (backbone size, input size); older ones are a bare state_dict
+        self.meta = ck["meta"] if isinstance(ck, dict) and "meta" in ck else {}
+        sd = ck["state_dict"] if isinstance(ck, dict) and "state_dict" in ck else ck
+        self.in_size = int(self.meta.get("in_size", IN))
+        variant = self.meta.get("variant", variant)
+        # architecture config ships with the package, so no network access is needed at inference time
+        cfg = AutoConfig.from_pretrained(os.path.join(os.path.dirname(__file__), "configs", variant))
         self.net = AutoModelForDepthEstimation.from_config(cfg)
-        sd = torch.load(weights, map_location="cpu")
         self.net.load_state_dict({k: v.float() for k, v in sd.items()})
         self.net.to(self.device).eval()
 
@@ -61,7 +66,7 @@ class HeightModel:
         """batch: float32 (B,3,512,512) in [0,1] -> (B,512,512) heights."""
         torch, F = self.torch, self.torch.nn.functional
         x = torch.from_numpy(batch).to(self.device)
-        x = F.interpolate(x, size=(IN, IN), mode="bilinear", align_corners=False)
+        x = F.interpolate(x, size=(self.in_size, self.in_size), mode="bilinear", align_corners=False)
         x = (x - torch.from_numpy(MEAN).to(self.device)) / torch.from_numpy(STD).to(self.device)
         with torch.no_grad():
             p = self.net(pixel_values=x).predicted_depth[:, None]

@@ -2,10 +2,13 @@
 sf_downtown         urban    -122.404 37.787  -122.396 37.794
 pittsburgh_hills    urban    -80.010  40.440  -80.000  40.448
 denver_midrise      urban    -104.998 39.742  -104.988 39.750
-albuquerque_suburb  sparse   -106.580 35.170  -106.570 35.178
 kansas_farmland     sparse   -97.190  38.150  -97.180  38.158
-illinois_farmland   sparse   -89.200  40.280  -89.190  40.288
+nebraska_farmland   sparse   -96.940  40.880  -96.930  40.888
+texas_sparse        sparse   -98.280  29.260  -98.270  29.268
 boulder_foothills   hilly    -105.280 39.975  -105.270 39.983
-wv_hills            hilly    -80.780  38.250  -80.770  38.258
+colorado_rockies    hilly    -105.530 39.820  -105.520 39.828
+kentucky_hills      hilly    -83.170  37.410  -83.160  37.418
 smoky_forest        forest   -83.515  35.600  -83.505  35.608
-maine_forest        forest   -69.240  44.980  -69.230  44.988
+pennsylvania_forest forest   -77.560  41.320  -77.550  41.328
+vermont_forest      forest   -72.720  43.890  -72.710  43.898
+tahoe_forest        forest   -119.920 39.030  -119.910 39.038

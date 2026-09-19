@@ -41,12 +41,12 @@ def test_gcp_plane_correction_recovers_offset_and_tilt():
     H, W = 200, 300
     tr = from_origin(500000, 4000000, 2.0, 2.0)
     dsm = np.zeros((H, W), np.float32)
-    rows, cols = np.array([10, 50, 150, 190, 100]), np.array([20, 250, 40, 280, 150])
+    rows, cols = np.array([10, 50, 150, 190, 100, 30]), np.array([20, 250, 40, 280, 150, 160])
     xs = tr.c + (cols + 0.5) * tr.a
     ys = tr.f + (rows + 0.5) * tr.e
     truth = 3.0 + 0.01 * (xs - xs.mean()) - 0.02 * (ys - ys.mean())
     corr, info = P._gcp_correction(dsm, tr, np.c_[xs, ys, truth])
-    assert info["model"] == "plane" and info["n_used"] == 5
+    assert info["model"] == "plane" and info["n_used"] == 6
     np.testing.assert_allclose(corr[rows, cols], truth, atol=1e-3)
 
 

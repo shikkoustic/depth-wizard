@@ -3,7 +3,8 @@
 # Model selection uses the GAMUS val split only; the test split is evaluated once, at the end.
 CFG = dict(name="small_main", model="Small", epochs=14, bs=8, accum=1, lr_enc=5e-6, lr_dec=5e-5,
            tall_weight=True, grad_loss=0.5, degrade=True, holdout_city=None, time_budget_h=10.5,
-           n_tta_eval=800, zeroshot_baseline=True, smoke=False)
+           n_tta_eval=800, zeroshot_baseline=True, smoke=False,
+           in_size=518, tall_cap=3.0, oversample_tall=0.0)
 #@CFG@
 
 import os, json, time, math, random, glob, traceback
@@ -39,7 +40,7 @@ R["n_train"], R["n_val"] = len(tr_ids), len(va_ids)
 R["train_cities"] = sorted({i.split("_")[0] for i in tr_ids}); log("train", Xtr.shape, "val", Xva.shape, R["train_cities"]); save()
 
 MEAN = torch.tensor([0.485, 0.456, 0.406], device=dev).view(1, 3, 1, 1); STD = torch.tensor([0.229, 0.224, 0.225], device=dev).view(1, 3, 1, 1)
-IN = 518  # 37 x 14 patches
+IN = CFG["in_size"]  # multiple of 14 (ViT patch): 518 = 37x37 tokens, 770 = 55x55
 
 def to_input(x):  # uint8 NHWC tensor on GPU -> normalized NCHW 518
     x = x.permute(0, 3, 1, 2).float() / 255.
@@ -92,7 +93,7 @@ def grad_loss(p, y, valid, scales=4):
 
 def loss_fn(p, y):
     valid = torch.isfinite(y); yv = torch.nan_to_num(y)
-    w = (1 + (yv / 10).clamp(0, 3)) if CFG["tall_weight"] else torch.ones_like(yv)
+    w = (1 + (yv / 10).clamp(0, CFG["tall_cap"])) if CFG["tall_weight"] else torch.ones_like(yv)
     l1 = ((p - yv).abs() * w * valid).sum() / (w * valid).sum().clamp(min=1)
     return l1 + (CFG["grad_loss"] * grad_loss(p, y, valid) if CFG["grad_loss"] else 0.)
 
@@ -171,10 +172,20 @@ sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: min(1, (s + 1) / warm) 
 scaler = torch.amp.GradScaler("cuda")
 
 va_sub = np.random.RandomState(1).choice(len(Xva), min(300, len(Xva)), replace=False)
+SAMPLE_P = None
+if CFG["oversample_tall"] > 0:
+    tall = np.array([float(np.mean(np.nan_to_num(y[::4, ::4].astype(np.float32)) > 20)) for y in Ytr])
+    SAMPLE_P = 1 + CFG["oversample_tall"] * tall / max(tall.mean(), 1e-6)  # avg-tall tile: (1+k)x, none: 1x
+    SAMPLE_P = SAMPLE_P / SAMPLE_P.sum()
+    R["oversample"] = dict(frac_tiles_with_tall=float((tall > 0.01).mean()), max_over_min_prob=float(SAMPLE_P.max() / SAMPLE_P.min()))
 hist, best = [], (1e9, -1)
 try:
     for ep in range(CFG["epochs"]):
-        model.train(); order = np.random.permutation(len(Xtr)); L = []; t_ep = time.time()
+        model.train(); L = []; t_ep = time.time()
+        if CFG["oversample_tall"] > 0:  # draw tiles with many tall (>20 m) pixels more often
+            order = np.random.choice(len(Xtr), len(Xtr), replace=True, p=SAMPLE_P)
+        else:
+            order = np.random.permutation(len(Xtr))
         for k in range(0, len(order) - CFG["bs"] + 1, CFG["bs"]):
             b = np.sort(order[k:k + CFG["bs"]])
             x = torch.from_numpy(Xtr[b]).to(dev, non_blocking=True); y = torch.from_numpy(Ytr[b].astype(np.float32)).to(dev)
@@ -191,14 +202,16 @@ try:
         r = dict(ep=ep, train_loss=float(np.mean(L)), minutes=(time.time() - t_ep) / 60, **{f"val_{k}": v for k, v in pooled(Pv, gv).items()})
         hist.append(r); R["history"] = hist; log(r)
         if r["val_rmse"] < best[0]:
-            best = (r["val_rmse"], ep); torch.save({k: v.half() for k, v in model.state_dict().items()}, f"{OUT}/best.pt")
+            best = (r["val_rmse"], ep); torch.save({"state_dict": {k: v.half() for k, v in model.state_dict().items()},
+                        "meta": dict(variant=CFG["model"], in_size=IN, tile=512, gsd_m=0.66, run=CFG["name"], epoch=ep,
+                                     val_rmse=r["val_rmse"])}, f"{OUT}/best.pt")
         R["best_epoch"] = best[1]; save()
         if (time.time() - T0) / 3600 > CFG["time_budget_h"] * 0.6: log("time budget: stopping training"); break
 except Exception:
     R["train_error"] = traceback.format_exc(); save(); raise
 
 del Xtr, Ytr
-sd = torch.load(f"{OUT}/best.pt"); model.load_state_dict({k: v.float() for k, v in sd.items()}); model.eval()
+sd = torch.load(f"{OUT}/best.pt")["state_dict"]; model.load_state_dict({k: v.float() for k, v in sd.items()}); model.eval()
 log("loaded best epoch", best[1])
 
 # full val with best model

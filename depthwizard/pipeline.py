@@ -61,7 +61,8 @@ def _read_gcps(path):
 
 
 def _gcp_correction(dsm, transform, pts):
-    """Robust planar correction z = a + b*x + c*y fitted to (GCP − DSM) residuals (constant if < 3 points)."""
+    """Robust correction fitted to (GCP − DSM) residuals: a constant offset (median) for fewer than 6 points,
+    otherwise a plane z = a + b*x + c*y (a tilt fitted to very few points extrapolates badly)."""
     inv = ~transform
     rows = []
     for x, y, z in pts:
@@ -72,7 +73,7 @@ def _gcp_correction(dsm, transform, pts):
     if not rows:
         return None, dict(n_used=0)
     R = np.array(rows)
-    if len(R) < 3:
+    if len(R) < 6:
         off = float(np.median(R[:, 2]))
         return np.full(dsm.shape, off, np.float32), dict(n_used=len(R), model="constant", offset_m=off)
     x0, y0 = R[:, 0].mean(), R[:, 1].mean()
