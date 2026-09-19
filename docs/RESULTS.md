@@ -314,3 +314,14 @@ MAE and correlation per site and method are in `runs/bench/bench_results.json`.
 | base-main | 5.66 | 3.81 | -1.78 | 0.606 | 11.77 (-10.84) |
 | small-main | 6.14 | 4.06 | -1.82 | 0.529 | 11.47 (-10.76) |
 | mixed_small (trained with rural set) | 5.85 | 3.11 | 1.30 | 0.691 | 4.36 (-2.84) |
+
+## 4. Robustness to coarser imagery (augmentation ablation)
+
+16 GAMUS test tiles degraded to simulate 1.3 m and 2 m imagery (downsample, then upsample to the 0.66 m model grid), scored against LiDAR. `ablation_plain` is the same Small model trained without the blur augmentation, tall-pixel weighting and gradient loss. Reproduce with `bench/robustness.py`.
+
+| Model | RMSE / corr at 0.7m | RMSE / corr at 1.3m | RMSE / corr at 2.0m |
+| --- | --- | --- | --- |
+| small_main | 5.88 / 0.808 | 5.94 / 0.803 | 6.18 / 0.785 |
+| ablation_plain | 5.85 / 0.814 | 9.13 / 0.640 | 12.00 / 0.053 |
+| small_tall | 5.86 / 0.810 | 5.85 / 0.810 | 6.00 / 0.797 |
+| mixed_small | 5.86 / 0.809 | 6.01 / 0.799 | 6.38 / 0.769 |
