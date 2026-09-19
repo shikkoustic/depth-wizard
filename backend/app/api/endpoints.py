@@ -77,16 +77,16 @@ def health_check():
 def list_sample_datasets():
     samples = []
     names_map = {
-        "sf_downtown_georef.tif": "San Francisco Downtown (Skyscrapers)",
-        "sample_urban_georef.tif": "Delhi Urban High-Density (GAMUS)",
-        "sample_hilly_georef.tif": "Hilly Mountainous Ridge",
-        "sample_drone_rgb.jpg": "Aerial Drone Survey (4K RGB)",
-        "gamus_DC_03_26_rgb.jpg": "ISRO GAMUS Sector 03-26",
-        "gamus_DC_05_28_rgb.jpg": "ISRO GAMUS Sector 05-28",
-        "gamus_DC_05_30_rgb.jpg": "ISRO GAMUS Sector 05-30"
+        "sf_downtown_georef.tif": "San Francisco Downtown (300m Skyscraper Towers)",
+        "gamus_DC_03_26_rgb.jpg": "GAMUS: DC Urban (LiDAR AGL)",
+        "gamus_DC_05_28_rgb.jpg": "GAMUS: Commercial High-Rise",
+        "gamus_DC_05_30_rgb.jpg": "GAMUS: Canopy & Residential"
     }
+    excluded = {"sample_urban_georef.tif", "sample_hilly_georef.tif", "sample_drone_rgb.jpg"}
     if os.path.exists(SAMPLE_DIR):
         for f in os.listdir(SAMPLE_DIR):
+            if f in excluded:
+                continue
             if f.endswith("_georef.tif") or f.endswith("_rgb.jpg"):
                 disp_name = names_map.get(f, f.replace("_", " ").replace(".tif", "").replace(".jpg", "").title())
                 samples.append({
@@ -95,8 +95,7 @@ def list_sample_datasets():
                     "filename": f,
                     "is_georeferenced": f.endswith(".tif")
                 })
-    # Sort so SF Downtown and Urban samples are at the top
-    samples.sort(key=lambda x: 0 if "San Francisco" in x["name"] else (1 if "Delhi" in x["name"] else 2))
+    samples.sort(key=lambda x: 0 if "San Francisco" in x["name"] else 1)
     return {"samples": samples}
 
 
@@ -130,7 +129,7 @@ async def process_image(
         # Default to SF Downtown skyscraper sample
         input_path = os.path.join(SAMPLE_DIR, "sf_downtown_georef.tif")
         if not os.path.exists(input_path):
-            input_path = os.path.join(SAMPLE_DIR, "sample_urban_georef.tif")
+            input_path = os.path.join(SAMPLE_DIR, "gamus_DC_03_26_rgb.jpg")
 
     # Adjust target_max_height for skyscraper presets
     if preset and "sf_downtown" in preset and target_max_height <= 50.0:
@@ -345,13 +344,15 @@ async def evaluate_metrics(
     Evaluates generated DSM against ground truth LiDAR data.
     If no LiDAR file uploaded, benchmarks against sample LiDAR reference.
     """
-    urban_lidar_path = os.path.join(SAMPLE_DIR, "sample_urban_lidar.tif")
+    default_lidar = os.path.join(SAMPLE_DIR, "sf_downtown_lidar.tif")
+    if not os.path.exists(default_lidar):
+        default_lidar = os.path.join(SAMPLE_DIR, "gamus_DC_03_26_lidar.tif")
     if lidar_file:
         gt_path = os.path.join(OUTPUT_DIR, f"gt_{lidar_file.filename}")
         with open(gt_path, "wb") as f:
             f.write(await lidar_file.read())
     else:
-        gt_path = urban_lidar_path
+        gt_path = default_lidar
 
     # If task_id provided, load predicted GeoTIFF
     if task_id:
