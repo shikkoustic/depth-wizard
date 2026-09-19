@@ -4,7 +4,13 @@
 CFG = dict(name="small_main", model="Small", epochs=14, bs=8, accum=1, lr_enc=5e-6, lr_dec=5e-5,
            tall_weight=True, grad_loss=0.5, degrade=True, holdout_city=None, time_budget_h=10.5,
            n_tta_eval=800, zeroshot_baseline=True, smoke=False,
-           in_size=518, tall_cap=3.0, oversample_tall=0.0, extra_naip=False)
+           in_size=518, tall_cap=3.0, oversample_tall=0.0, extra_naip=False,
+           extras="", strat_sampling=False, loss_mode="l1", exclude_cities="tampa")
+# exclude_cities: extra-dataset tiles from these cities are dropped (tampa: 2007 LiDAR in feet, labels 3.3x too tall)
+# extras: comma list of extra datasets mounted under /kaggle/input, each <name>_meta.json + <name>_rgb.npy + <name>_agl.npy
+#   with a per-tile "split" list (train/val/test). e.g. "naip,urban,sat". extra_naip=True is kept as an alias for "naip".
+# strat_sampling: draw tiles by height class (CHMv2 recipe) instead of uniformly.
+# loss_mode: "l1" (weighted L1 + optional gradient loss) or "charb_curriculum" (SiLog -> Charbonnier + ramped gradient loss).
 #@CFG@
 
 import os, json, time, math, random, glob, traceback
@@ -36,17 +42,22 @@ tr_ids, Xtr, Ytr, _ = load("train", exclude=hc)
 va_ids, Xva, Yva, _ = load("val", exclude=hc)
 if CFG["smoke"]:  # quick end-to-end check of the whole script on a few tiles
     tr_ids, Xtr, Ytr = tr_ids[:64], Xtr[:64], Ytr[:64]; va_ids, Xva, Yva = va_ids[:32], Xva[:32], Yva[:32]
-# optional extra data: NAIP + 3DEP LiDAR tiles (rural / forest / hilly / arid), split by region
-XnV = YnV = XnT = YnT = None
-if CFG["extra_naip"]:
-    nm_path = glob.glob("/kaggle/input/**/naip_meta.json", recursive=True)[0]; ND = os.path.dirname(nm_path)
-    NM = json.load(open(nm_path)); sp = np.array(NM["split"])
-    Xn = np.load(f"{ND}/naip_rgb.npy", mmap_mode="r"); Yn = np.load(f"{ND}/naip_agl.npy", mmap_mode="r")
+# optional extra datasets (region/city-level splits made by their prep kernels)
+EXTRA_VAL, EXTRA_TEST = {}, {}
+_extras = [e for e in CFG["extras"].split(",") if e] + (["naip"] if CFG["extra_naip"] and "naip" not in CFG["extras"] else [])
+for name in _extras:
+    mp = glob.glob(f"/kaggle/input/**/{name}_meta.json", recursive=True)[0]; ED = os.path.dirname(mp)
+    EM = json.load(open(mp)); sp = np.array(EM["split"], dtype=object)
+    bad = {c for c in CFG["exclude_cities"].split(",") if c}
+    for i, t in enumerate(EM.get("tiles", [])):
+        if t.get("city") in bad: sp[i] = "excluded"
+    Xe = np.load(f"{ED}/{name}_rgb.npy", mmap_mode="r"); Ye = np.load(f"{ED}/{name}_agl.npy", mmap_mode="r")
     itr, iva, ite = [np.flatnonzero(sp == k) for k in ("train", "val", "test")]
-    Xtr = np.concatenate([Xtr, Xn[itr]]); Ytr = np.concatenate([Ytr, Yn[itr]])
-    tr_ids = tr_ids + [f"NAIP_{i}" for i in itr]
-    XnV, YnV, XnT, YnT = np.asarray(Xn[iva]), np.asarray(Yn[iva]), np.asarray(Xn[ite]), np.asarray(Yn[ite])
-    R["naip"] = dict(train_tiles=len(itr), val_tiles=len(iva), test_tiles=len(ite), regions=len(NM["items"]))
+    Xtr = np.concatenate([Xtr, Xe[itr]]); Ytr = np.concatenate([Ytr, Ye[itr]])
+    tr_ids = tr_ids + [f"{name.upper()}_{i}" for i in itr]
+    if len(iva): EXTRA_VAL[name] = (np.asarray(Xe[iva]), np.asarray(Ye[iva]))
+    if len(ite): EXTRA_TEST[name] = (np.asarray(Xe[ite]), np.asarray(Ye[ite]))
+    R[f"extra_{name}"] = dict(train_tiles=len(itr), val_tiles=len(iva), test_tiles=len(ite))
 R["n_train"], R["n_val"] = len(tr_ids), len(va_ids)
 R["train_cities"] = sorted({i.split("_")[0] for i in tr_ids}); log("train", Xtr.shape, "val", Xva.shape, R["train_cities"]); save()
 
@@ -102,8 +113,20 @@ def grad_loss(p, y, valid, scales=4):
         tot = tot + (gx.sum() + gy.sum()) / valid.sum().clamp(min=1)
     return tot / scales
 
+STEP = [0]  # global optimisation step (for the loss curriculum)
+
 def loss_fn(p, y):
     valid = torch.isfinite(y); yv = torch.nan_to_num(y)
+    if CFG["loss_mode"] == "charb_curriculum":
+        # CHMv2 recipe: start scale-invariant (SiLog in log(1+h)), move to Charbonnier over the first 30 % of
+        # training, and ramp a small gradient term 0 -> 0.075 (SiLog alone biases large heights low)
+        t = min(1.0, STEP[0] / max(1, 0.3 * total))
+        vm = valid.float()
+        lp, ly = torch.log1p(p.clamp(min=0)), torch.log1p(yv.clamp(min=0))
+        d = (lp - ly) * vm; n = vm.sum().clamp(min=1)
+        silog = torch.sqrt(((d ** 2).sum() / n - 0.85 * (d.sum() / n) ** 2).clamp(min=1e-8)) * 10
+        charb = (torch.sqrt((p - yv) ** 2 + 1e-2) * vm).sum() / n
+        return (1 - t) * silog + t * charb + 0.075 * t * grad_loss(p, y, valid)
     w = (1 + (yv / 10).clamp(0, CFG["tall_cap"])) if CFG["tall_weight"] else torch.ones_like(yv)
     l1 = ((p - yv).abs() * w * valid).sum() / (w * valid).sum().clamp(min=1)
     return l1 + (CFG["grad_loss"] * grad_loss(p, y, valid) if CFG["grad_loss"] else 0.)
@@ -184,7 +207,15 @@ scaler = torch.amp.GradScaler("cuda")
 
 va_sub = np.random.RandomState(1).choice(len(Xva), min(300, len(Xva)), replace=False)
 SAMPLE_P = None
-if CFG["oversample_tall"] > 0:
+if CFG["strat_sampling"]:
+    # height-class sampling (CHMv2 recipe): tile class from its 95th-percentile height; fixed share per class
+    p95 = np.array([float(np.nanpercentile(y[::4, ::4].astype(np.float32), 95)) for y in Ytr])
+    edges, share = [0, 2, 10, 25, 50, 1e4], np.array([0.10, 0.30, 0.30, 0.18, 0.12])
+    cls = np.clip(np.searchsorted(edges, p95, side="right") - 1, 0, 4)
+    present = np.array([(cls == c).any() for c in range(5)]); share = share * present; share /= share.sum()
+    SAMPLE_P = np.array([share[c] / (cls == c).sum() for c in cls]); SAMPLE_P /= SAMPLE_P.sum()
+    R["strat_sampling"] = dict(tiles_per_class=[int((cls == c).sum()) for c in range(5)], share=share.tolist())
+if CFG["oversample_tall"] > 0 and SAMPLE_P is None:
     tall = np.array([float(np.mean(np.nan_to_num(y[::4, ::4].astype(np.float32)) > 20)) for y in Ytr])
     SAMPLE_P = 1 + CFG["oversample_tall"] * tall / max(tall.mean(), 1e-6)  # avg-tall tile: (1+k)x, none: 1x
     SAMPLE_P = SAMPLE_P / SAMPLE_P.sum()
@@ -193,7 +224,7 @@ hist, best = [], (1e9, -1)
 try:
     for ep in range(CFG["epochs"]):
         model.train(); L = []; t_ep = time.time()
-        if CFG["oversample_tall"] > 0:  # draw tiles with many tall (>20 m) pixels more often
+        if SAMPLE_P is not None:  # stratified / tall-oversampled draw
             order = np.random.choice(len(Xtr), len(Xtr), replace=True, p=SAMPLE_P)
         else:
             order = np.random.permutation(len(Xtr))
@@ -208,12 +239,14 @@ try:
             scaler.scale(loss).backward(); L.append(loss.item() * CFG["accum"])
             if (k // CFG["bs"] + 1) % CFG["accum"] == 0:
                 scaler.unscale_(opt); torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                scaler.step(opt); scaler.update(); opt.zero_grad(set_to_none=True); sched.step()
+                scaler.step(opt); scaler.update(); opt.zero_grad(set_to_none=True); sched.step(); STEP[0] += 1
         Pv = predict(model, Xva[va_sub]); gv = Yva[va_sub].astype(np.float32)
         r = dict(ep=ep, train_loss=float(np.mean(L)), minutes=(time.time() - t_ep) / 60, **{f"val_{k}": v for k, v in pooled(Pv, gv).items()})
-        if XnV is not None and len(XnV):  # select on both domains: mean of GAMUS-val and NAIP-val RMSE
-            rn = pooled(predict(model, XnV), YnV.astype(np.float32)); r.update({f"naipval_{k}": v for k, v in rn.items()})
-            r["val_rmse_gamus"] = r["val_rmse"]; r["val_rmse"] = 0.5 * (r["val_rmse_gamus"] + rn["rmse"])
+        if EXTRA_VAL:  # select on all domains: mean of GAMUS-val and each extra val RMSE
+            doms = [r["val_rmse"]]
+            for name, (xv, yv) in EXTRA_VAL.items():
+                rn = pooled(predict(model, xv), yv.astype(np.float32)); r.update({f"{name}val_{k}": v for k, v in rn.items()}); doms.append(rn["rmse"])
+            r["val_rmse_gamus"] = r["val_rmse"]; r["val_rmse"] = float(np.mean(doms))
         hist.append(r); R["history"] = hist; log(r)
         if r["val_rmse"] < best[0]:
             best = (r["val_rmse"], ep); torch.save({"state_dict": {k: v.half() for k, v in model.state_dict().items()},
@@ -230,11 +263,11 @@ log("loaded best epoch", best[1])
 
 # full val with best model
 Pv = predict(model, Xva); R["val_full"] = pooled(Pv, Yva.astype(np.float32)); save(); del Pv
-if XnT is not None and len(XnT):  # held-out rural regions (never used for training or selection)
-    Pn = predict(model, XnT); Gn = YnT.astype(np.float32)
-    R["naip_test"] = dict(n_tiles=len(XnT), pooled=pooled(Pn, Gn), zero=pooled(np.zeros_like(Gn), Gn),
-                          by_height=breakdown(Pn, Gn, None, ["NAIP"] * len(Gn))["by_height"])
-    log("naip_test", json.dumps(R["naip_test"]["pooled"])); save(); del Pn
+for name, (xt, yt) in EXTRA_TEST.items():  # held-out regions / cities (never used for training or selection)
+    Pn = predict(model, xt); Gn = yt.astype(np.float32)
+    R[f"{name}_test"] = dict(n_tiles=len(xt), pooled=pooled(Pn, Gn), zero=pooled(np.zeros_like(Gn), Gn),
+                             by_height=breakdown(Pn, Gn, None, [name] * len(Gn))["by_height"])
+    log(f"{name}_test", json.dumps(R[f"{name}_test"]["pooled"])); save(); del Pn
 
 # ---------------- test (once) ----------------
 te_ids, Xte, Yte, Cte = load("test", cities=[hc] if hc else None)

@@ -7,6 +7,8 @@ owner = args[args.index("--owner") + 1] if "--owner" in args else "shikkoustic"
 self_prep = "--self-prep" in args
 args = [a for i, a in enumerate(args) if a != "--self-prep" and a != "--owner" and (i == 0 or args[i - 1] != "--owner")]
 name, overrides = args[0], dict(a.split("=", 1) for a in args[1:])
+# data kernels live on the same account that runs the training kernel (private outputs can't be shared)
+SRC = {"naip": f"{owner}/depthwizard-naip-prep", "urban": f"{owner}/depthwizard-naip-urban", "sat": f"{owner}/depthwizard-sat-prep"}
 src = open(os.path.join(os.path.dirname(__file__), "train.py")).read()
 if self_prep:
     prep = open(os.path.join(os.path.dirname(__file__), "..", "gamus_prep", "gamus_prep.py")).read()
@@ -21,6 +23,7 @@ open(os.path.join(d, "train.py"), "w").write(src.replace("#@CFG@", line))
 slug = f"depthwizard-train-{name}".replace("_", "-")
 json.dump({"id": f"{owner}/{slug}", "title": slug, "code_file": "train.py", "language": "python", "kernel_type": "script",
            "is_private": True, "enable_gpu": True, "enable_internet": True, "dataset_sources": [], "competition_sources": [],
-           "kernel_sources": ([] if self_prep else ["shikkoustic/depthwizard-gamus-prep"])
-                             + (["shikkoustic/depthwizard-naip-prep"] if overrides.get("extra_naip") == "True" else [])}, open(os.path.join(d, "kernel-metadata.json"), "w"), indent=1)
+           "kernel_sources": ([] if self_prep else [f"{owner}/depthwizard-gamus-prep"])
+                             + ([f"{owner}/depthwizard-naip-prep"] if overrides.get("extra_naip") == "True" else [])
+                             + [SRC[e] for e in overrides.get("extras", "").strip("'\"").split(",") if e in SRC]}, open(os.path.join(d, "kernel-metadata.json"), "w"), indent=1)
 print(d, "|", line)
