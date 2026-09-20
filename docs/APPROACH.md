@@ -2,9 +2,9 @@
 
 SIH 2026 · PS SIH26175 (ISRO / SAC) · single-view optical RGB image → DSM → interactive 3D flythrough.
 
-This document records *why* the system is built the way it is. Every number quoted here is either
-measured by us (and reproducible from a script in this repo) or cited with its source. Numbers we
-have not measured yet are marked **TBD**.
+This document records *why* the system is built the way it is. Every number quoted here is either measured by
+us (and reproducible from a script in this repo) or cited with its source; the measurements themselves live in
+[RESULTS.md](RESULTS.md).
 
 ## 1. Core idea: DSM = terrain + above-ground height
 
@@ -48,8 +48,10 @@ user uploads (offline mode).
   - *GSD augmentation*: downsample by 1–4× and upsample back, so the model sees the blur of
     0.3–1.6 m Cartosat pan-sharpened products and not only 0.33 m aerial-like tiles.
   - Colour / contrast jitter (different sensor, atmosphere, season), flips and 90° rotations.
-- **Loss:** L1 with extra weight on tall pixels (tall buildings and trees are under-predicted by
-  plain L1) + a multi-scale gradient term for sharp roof edges.
+- **Loss ablation (measured):** a height-weighted L1 plus a gradient term was *no better* overall on GAMUS than
+  plain L1 (3.98 vs 4.07 m RMSE) and only slightly better on tall pixels, so the final recipe uses the
+  SiLog → Charbonnier curriculum above instead. The blur augmentation, by contrast, is essential (section 3 of
+  RESULTS.md).
 - **Inference:** tiles of ~0.33 m-equivalent content with overlap and cosine blending, so any image
   size works on CPU.
 
@@ -99,7 +101,12 @@ deciles. It is therefore presented as a real uncertainty layer.
 
 ## 7. Known limitations (stated up front)
 
-- Training heights are from three US cities; Indian urban form, materials and vegetation differ.
+- All training heights are from the United States (three GAMUS cities plus our NAIP/3DEP rural and downtown
+  tiles); Indian urban form, materials and vegetation differ. The Sikkim demo (Maxar Open Data, 0.37 m) is the
+  closest check we have over India, and it has no ground truth.
 - Terrain accuracy is bounded by the 30 m DEM; the network does not invent terrain detail.
-- Off-nadir images: tall buildings lean; heights are predicted where the roof appears, not the footprint.
+- Off-nadir images: tall buildings lean; heights are predicted where the roof appears, not the footprint
+  (measured as an 8–16 m best-match shift against LiDAR in SF and Pittsburgh).
+- Tall structures remain the largest error source: above 40 m the model is still ~16 m low on held-out downtowns
+  (it was ~39 m low before the downtown training data was added).
 - No open LiDAR over India was found, so India results are sanity checks against model-derived maps.
