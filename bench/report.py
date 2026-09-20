@@ -74,41 +74,42 @@ def gamus_section(runs):
     return L
 
 
-def bench_section(res):
+def bench_section(runs_by_model):
+    """runs_by_model: {model name -> per-site results}. Scores the full pipeline against 3DEP LiDAR."""
+    first = list(runs_by_model.values())[0]
+    bad = {n: r for n, r in first.items() if r.get("valid") is False}
+    names = [n for n, r in first.items() if r.get("valid") is not False]
+    ter = {n: first[n]["terrain"] for n in names}
+    def rmse(res, n, k="ours"):
+        v = res[n]["datum_aligned"].get(k)
+        return v["rmse"] if v else float("nan")
     L = ["", "## 2. Full pipeline (absolute DSM) vs USGS 3DEP LiDAR", "",
          "Input: NAIP 0.6 m RGB GeoTIFF (aerial, not satellite). Output compared with the 3DEP LiDAR top surface on its 2 m grid. "
          "Reference rule: the 3DEP DSM product under-records canopy/roof tops for some LiDAR projects (measured 7–16 m below "
-         "DTM + height-above-ground on tree pixels; at the Kansas site an independent 1 m canopy map (Meta/WRI) gave 9.6 m "
-         "on trees vs 10.9 m HAG vs 3.8 m DSM−DTM), so the reference is DTM + HAG where that lies 0–40 m above the DSM "
-         "product, and the DSM product elsewhere. "
-         "`ours` = FABDEM bare-earth terrain + predicted above-ground height. Datum-aligned rows remove one per-site "
-         "vertical offset (NAVD88 vs EGM2008), estimated on LiDAR bare-ground pixels and applied equally to every method; "
-         "that offset uses the reference, so treat it as an upper bound. `ours_5gcp` instead corrects the terrain with 5 "
-         "ground-control points taken from LiDAR bare ground (no oracle offset). None of these sites are in the GAMUS "
-         "training cities.", ""]
-    L += [row(["Site", "Terrain", "ours", "ours + coarse-DEM scale", "ours + 5 GCP", "FABDEM only", "Copernicus only",
-               "nDSM RMSE (ours / zero)", "datum offset"]), row(["---"] * 9)]
-    agg = {}
-    bad = {n: r for n, r in res.items() if r.get("valid") is False}
-    res = {n: r for n, r in res.items() if r.get("valid") is not False}
-    for name, r in res.items():
-        d = r["datum_aligned"]
-        g = lambda k: f(d.get(k, {}) and d[k]["rmse"]) if d.get(k) else "—"
-        nd, z = r.get("ndsm_vs_lidar") or {}, r.get("ndsm_zero_baseline") or {}
-        L.append(row([name, r["terrain"], g("ours"), g("ours_coarse_cal"), g("ours_5gcp"), g("fabdem_only"), g("copernicus_only"),
-                      f"{f(nd.get('rmse'))} / {f(z.get('rmse'))}", f(r["datum_offset_m"])]))
-        for k in ("ours", "ours_5gcp", "fabdem_only", "copernicus_only"):
-            if d.get(k):
-                agg.setdefault(r["terrain"], {}).setdefault(k, []).append(d[k]["rmse"])
-    L += ["", "RMSE (m), datum-aligned. Mean over sites per terrain type:", "",
-          row(["Terrain", "sites", "ours", "ours + 5 GCP", "FABDEM only", "Copernicus only"]), row(["---"] * 6)]
-    for t, v in agg.items():
-        n = len(v.get("ours", []))
-        L.append(row([t, n] + [f(np.mean(v[k])) if v.get(k) else "—" for k in ("ours", "ours_5gcp", "fabdem_only", "copernicus_only")]))
+         "DTM + height-above-ground on tree pixels; at the Kansas site an independent 1 m canopy map (Meta/WRI) gave 9.6 m on "
+         "trees vs 10.9 m HAG vs 3.8 m DSM−DTM), so the reference is DTM + HAG where that lies 0–40 m above the DSM product, "
+         "and the DSM product elsewhere. One per-site vertical offset (NAVD88 vs EGM2008), estimated on LiDAR bare-ground "
+         "pixels, is removed from every method alike. None of these sites are in any training set.", "",
+         row(["Site", "Terrain"] + list(runs_by_model) + ["FABDEM only", "Copernicus only"]), row(["---"] * (len(runs_by_model) + 4))]
+    for n in names:
+        L.append(row([n, ter[n]] + [f(rmse(r, n)) for r in runs_by_model.values()] +
+                     [f(rmse(first, n, "fabdem_only")), f(rmse(first, n, "copernicus_only"))]))
+    def summary(get):
+        per = {t: np.mean([get(n) for n in names if ter[n] == t]) for t in sorted(set(ter.values()))}
+        return np.mean([get(n) for n in names]), np.mean(list(per.values())), max(get(n) for n in names), per
+    L += ["", "RMSE (m). 'terrain-balanced' averages the four terrain types equally; 'worst site' is the maximum over sites.", "",
+          row(["Method", "mean", "terrain-balanced", "worst site"] + sorted(set(ter.values()))), row(["---"] * (4 + len(set(ter.values()))))]
+    rowsum = []
+    for m, r in runs_by_model.items():
+        mean, bal, worst, per = summary(lambda n, r=r: rmse(r, n)); rowsum.append((mean, m, bal, worst, per))
+    for k, lab in (("fabdem_only", "FABDEM 30 m only"), ("copernicus_only", "Copernicus 30 m only")):
+        mean, bal, worst, per = summary(lambda n, k=k: rmse(first, n, k)); rowsum.append((mean, lab, bal, worst, per))
+    for mean, m, bal, worst, per in sorted(rowsum):
+        L.append(row([m, f(mean), f(bal), f(worst)] + [f(per[t]) for t in sorted(per)]))
     if bad:
         L += ["", "Sites excluded automatically because the reference LiDAR itself failed a consistency check:", ""]
         L += [f"- `{n}` ({r['terrain']}): {r['invalid_reason']}" for n, r in bad.items()]
-    L += ["", "MAE and correlation per site and method are in `runs/bench/bench_results.json`."]
+    L += ["", "Per-site MAE, bias and correlation for every method are in `docs/data/bench_*.json`."]
     return L
 
 
@@ -144,9 +145,11 @@ def main():
          "Generated by `bench/report.py` from result files; every number below was measured by a script in this repo.", ""]
     if runs:
         L += gamus_section(runs)
-    bp = os.path.join(ROOT, "runs", "bench", "bench_results.json")
-    if os.path.exists(bp):
-        L += bench_section(json.load(open(bp)))
+    bench = {}
+    for p in sorted(glob.glob(os.path.join(ROOT, "runs", "bench_kaggle", "bench_*.json"))):
+        bench[os.path.basename(p)[6:-5].replace("depthwizard-train-", "").replace("ENS_", "ensemble ")] = json.load(open(p))
+    if bench:
+        L += bench_section(bench)
     evs = sorted(glob.glob(os.path.join(ROOT, "runs", "eval_naip*", "eval_naip.json")))
     if evs:
         ev = json.load(open(evs[0]))

@@ -21,7 +21,8 @@ Evidence:
 - Height datasets built for this task (GAMUS, DFC2019/US3D, Geopose) label **nDSM / AGL**, not absolute DSM.
 - Prompt2DEM (Rafaeli et al., 2025, arXiv 2507.09681), which feeds SRTM into Depth Anything V2,
   improves absolute-elevation MAE over SRTM alone by only 3–18 %. Most of the terrain signal comes from the DEM.
-- Our own check that monocular depth barely tracks terrain relief: see `docs/RESULTS.md` (TBD).
+- Our own error decomposition on the LiDAR benchmark: with perfect above-ground heights, our 30 m terrain source
+  leaves only 0.8–6.8 m RMSE per site, while the network accounts for nearly all of the remaining error.
 
 **Terrain source matters:** Copernicus GLO-30, AW3D30 and SRTM are *surface* models — they already
 contain (smoothed) buildings and forest. Adding a predicted nDSM on top would double-count them.
@@ -36,9 +37,13 @@ user uploads (offline mode).
   nDSM directly. Published remote-sensing work fine-tunes the same family cheaply (Depth Any Canopy,
   arXiv 2408.04523; Depth2Elevation, TGRS 2025). Small (25 M params) runs on a laptop CPU; Base is
   tried on Kaggle and kept only if it earns its cost.
-- **Data:** GAMUS (ISRO's recommended dataset; HF `earthflow/GAMUS`; 0.33 m RGB + LiDAR nDSM;
-  Washington DC, New York, Philadelphia; class IDs 0 others, 1 ground, 2 low vegetation, 3 building,
-  4 water, 5 road, 6 tree).
+- **Data (final model):** GAMUS (ISRO's recommended dataset; 5,004 training tiles; DC, New York, Philadelphia)
+  **plus two sets we built from free sources**, because GAMUS is city-only and nearly skyscraper-free:
+  893 rural/forest/hilly tiles and 335 US-downtown tiles (NAIP 0.6 m + USGS 3DEP LiDAR via Microsoft Planetary
+  Computer; `kaggle/naip_prep`, `kaggle/naip_urban`). Downtown tiles hold 4.1 % of pixels above 40 m against
+  0.3 % in GAMUS. Whole regions/cities are held out for testing; Dallas and Charlotte are never trained on.
+- **Sampling and loss:** tiles are drawn by height class (10 % flat … 12 % very tall) and the loss moves from
+  SiLog to Charbonnier during training, following the CHMv2 recipe; both target the long tail of tall structures.
 - **Augmentations aimed at ISRO imagery:**
   - *GSD augmentation*: downsample by 1–4× and upsample back, so the model sees the blur of
     0.3–1.6 m Cartosat pan-sharpened products and not only 0.33 m aerial-like tiles.
@@ -56,15 +61,16 @@ user uploads (offline mode).
 | GeoTIFF + GCPs | Absolute DSM, corrected | robust least-squares fit of a terrain offset/tilt and an nDSM scale to the control points |
 | PNG / JPG | **Relative DSM** (height above local ground, m; datum unknown) | nDSM only; the user may enter the pixel size, otherwise a nominal GSD is assumed and the output is clearly labelled *relative* |
 
-A second use of the coarse DEMs: *Copernicus (surface) − FABDEM (bare earth)* is a 30 m estimate of
-mean above-ground height. We test whether matching our nDSM's block means to it improves accuracy
-(**TBD**; kept only if it measurably helps).
+A second use of the coarse DEMs: *Copernicus (surface) − FABDEM (bare earth)* is a 30 m estimate of mean
+above-ground height. Measured: it helps on sparse farmland but hurts in cities (Copernicus flattens buildings —
+in downtown San Francisco it shows 2.4 m above ground where LiDAR shows 28 m), so it is **not** applied by default.
 
 ## 4. Uncertainty map
 
-Per-pixel spread across 8 test-time flips/rotations, reported in metres. The literature does not
-establish that this correlates with error for sub-metre imagery, so we **measure** it (error vs
-spread, binned) and only present it as an uncertainty if the correlation holds (**TBD**).
+Per-pixel spread across 8 test-time flips/rotations, reported in metres. The literature does not establish
+that this correlates with error for sub-metre imagery, so we measured it: Spearman correlation 0.78–0.79 between
+spread and absolute error on GAMUS test tiles, with MAE rising monotonically from 0.2 m to 5.5 m across spread
+deciles. It is therefore presented as a real uncertainty layer.
 
 ## 5. Evaluation plan
 

@@ -11,9 +11,15 @@ Pixel-pooled metrics over the full GAMUS test split (0.66 m/px, heights in metre
 | ablation_plain | Small | 2861 | 3.98 | 1.70 | -0.25 | 0.844 | 2.92 | 11 |
 | base_main | Base | 2861 | 3.85 | 1.69 | 0.12 | 0.856 | 2.85 | 7 |
 | holdout_dc | Small | 361 | 6.87 | 4.13 | -2.63 | 0.759 | 6.09 | 9 |
+| mixed_base | Base | 2861 | 3.97 | 1.77 | 0.12 | 0.846 | 2.96 | 7 |
 | mixed_small | Small | 2861 | 4.13 | 1.87 | 0.12 | 0.833 | 3.09 | 13 |
+| mixed_v2 | Small | 2861 | 4.30 | 1.83 | -0.51 | 0.818 | 3.13 | 6 |
 | small_main | Small | 2861 | 4.07 | 1.79 | 0.03 | 0.837 | 3.00 | 10 |
 | small_tall | Small | 2861 | 4.08 | 1.85 | 0.13 | 0.838 | 3.07 | 13 |
+| v3a_base | Base | 2861 | 3.76 | 1.68 | -0.38 | 0.864 | 2.88 | 8 |
+| v3a_small | Small | 2861 | 4.06 | 1.89 | -0.31 | 0.838 | 3.12 | 3 |
+| v3b_base | Base | 2861 | 3.80 | 1.70 | -0.27 | 0.860 | 2.91 | 7 |
+| v3c_base770 | Base | 2861 | 3.79 | 1.70 | -0.69 | 0.867 | 2.90 | 4 |
 
 `holdout_dc` was trained **without any Washington DC tiles** and tested only on DC test tiles, so it measures transfer to an unseen city. Compare with the DC row of the per-city breakdown of the runs that saw DC in training. Baselines on the same DC tiles: predict 0 m RMSE 12.03 m, per-tile mean oracle RMSE 8.07 m.
 
@@ -148,6 +154,48 @@ Test-time augmentation (361 test tiles): single pass RMSE 6.87 m → 8-view mean
 | 1.05–1.47 | 7.36 | 9.74 |
 | 1.47–14.50 | 7.11 | 9.56 |
 
+### mixed_base: breakdown
+
+| Class | RMSE | MAE | Bias | pixels |
+| --- | --- | --- | --- | --- |
+| others | 2.78 | 1.45 | 0.66 | 40,610,782 |
+| ground | 2.70 | 0.69 | 0.20 | 133,496,964 |
+| low_veg | 2.29 | 0.83 | 0.51 | 143,540,386 |
+| building | 5.95 | 2.58 | -0.61 | 153,945,680 |
+| water | 2.52 | 1.20 | 0.94 | 15,571,908 |
+| road | 2.33 | 0.84 | 0.08 | 110,430,278 |
+| tree | 4.89 | 3.62 | 0.23 | 152,397,986 |
+
+| True height band | RMSE | MAE | Bias |
+| --- | --- | --- | --- |
+| 0-2m | 2.26 | 0.77 | 0.57 |
+| 2-5m | 3.59 | 2.50 | 0.75 |
+| 5-10m | 3.40 | 2.24 | -0.04 |
+| 10-20m | 4.98 | 3.86 | -0.79 |
+| 20-40m | 6.52 | 4.74 | -3.31 |
+| 40-infm | 40.42 | 26.91 | -26.48 |
+
+| City | pixels | RMSE | MAE | Corr |
+| --- | --- | --- | --- | --- |
+| DC | 94,633,984 | 4.43 | 2.65 | 0.890 |
+| NYC | 262,144,000 | 3.72 | 2.10 | 0.862 |
+| PHL | 393,216,000 | 4.02 | 1.34 | 0.813 |
+
+Test-time augmentation (800 test tiles): single pass RMSE 3.74 m → 8-view mean RMSE 3.59 m. Spearman correlation between the 8-view spread and the absolute error: 0.776.
+
+| spread decile (m) | MAE (m) | RMSE (m) |
+| --- | --- | --- |
+| 0.00–0.00 | — | — |
+| 0.00–0.00 | — | — |
+| 0.00–0.00 | — | — |
+| 0.00–0.11 | 0.25 | 1.01 |
+| 0.11–0.28 | 0.93 | 1.74 |
+| 0.28–0.43 | 1.56 | 2.45 |
+| 0.43–0.60 | 2.23 | 3.30 |
+| 0.60–0.82 | 2.79 | 4.00 |
+| 0.82–1.18 | 3.32 | 4.64 |
+| 1.18–17.77 | 5.17 | 8.20 |
+
 ### mixed_small: breakdown
 
 | Class | RMSE | MAE | Bias | pixels |
@@ -189,6 +237,48 @@ Test-time augmentation (800 test tiles): single pass RMSE 3.86 m → 8-view mean
 | 0.65–0.89 | 2.97 | 4.24 |
 | 0.89–1.28 | 3.53 | 4.88 |
 | 1.28–16.30 | 5.38 | 8.52 |
+
+### mixed_v2: breakdown
+
+| Class | RMSE | MAE | Bias | pixels |
+| --- | --- | --- | --- | --- |
+| others | 2.54 | 1.22 | 0.07 | 40,610,782 |
+| ground | 2.49 | 0.56 | -0.02 | 133,496,964 |
+| low_veg | 1.98 | 0.66 | 0.26 | 143,540,386 |
+| building | 6.96 | 3.03 | -2.01 | 153,945,680 |
+| water | 2.38 | 1.14 | 0.86 | 15,571,908 |
+| road | 2.31 | 0.77 | -0.26 | 110,430,278 |
+| tree | 5.16 | 3.85 | -0.64 | 152,397,986 |
+
+| True height band | RMSE | MAE | Bias |
+| --- | --- | --- | --- |
+| 0-2m | 1.78 | 0.56 | 0.32 |
+| 2-5m | 3.24 | 2.35 | -0.05 |
+| 5-10m | 3.47 | 2.37 | -0.94 |
+| 10-20m | 5.73 | 4.62 | -2.25 |
+| 20-40m | 8.54 | 6.40 | -5.34 |
+| 40-infm | 47.39 | 34.80 | -34.74 |
+
+| City | pixels | RMSE | MAE | Corr |
+| --- | --- | --- | --- | --- |
+| DC | 94,633,984 | 4.67 | 2.79 | 0.876 |
+| NYC | 262,144,000 | 3.87 | 2.14 | 0.843 |
+| PHL | 393,216,000 | 4.47 | 1.40 | 0.790 |
+
+Test-time augmentation (800 test tiles): single pass RMSE 4.05 m → 8-view mean RMSE 3.96 m. Spearman correlation between the 8-view spread and the absolute error: 0.776.
+
+| spread decile (m) | MAE (m) | RMSE (m) |
+| --- | --- | --- |
+| 0.00–0.00 | — | — |
+| 0.00–0.00 | — | — |
+| 0.00–0.00 | 0.23 | 1.05 |
+| 0.00–0.05 | 0.40 | 1.35 |
+| 0.05–0.22 | 0.87 | 1.91 |
+| 0.22–0.40 | 1.45 | 2.36 |
+| 0.40–0.60 | 2.02 | 3.01 |
+| 0.60–0.90 | 2.72 | 3.95 |
+| 0.90–1.38 | 3.66 | 5.35 |
+| 1.38–13.59 | 5.92 | 9.45 |
 
 ### small_main: breakdown
 
@@ -274,36 +364,210 @@ Test-time augmentation (800 test tiles): single pass RMSE 3.83 m → 8-view mean
 | 0.89–1.29 | 3.50 | 4.85 |
 | 1.29–16.19 | 5.35 | 8.42 |
 
+### v3a_base: breakdown
+
+| Class | RMSE | MAE | Bias | pixels |
+| --- | --- | --- | --- | --- |
+| others | 2.47 | 1.20 | 0.17 | 40,610,782 |
+| ground | 2.45 | 0.54 | 0.01 | 133,496,964 |
+| low_veg | 1.86 | 0.61 | 0.24 | 143,540,386 |
+| building | 5.59 | 2.60 | -1.12 | 153,945,680 |
+| water | 2.27 | 1.11 | 0.84 | 15,571,908 |
+| road | 2.13 | 0.70 | -0.22 | 110,430,278 |
+| tree | 4.89 | 3.64 | -0.98 | 152,397,986 |
+
+| True height band | RMSE | MAE | Bias |
+| --- | --- | --- | --- |
+| 0-2m | 1.77 | 0.54 | 0.32 |
+| 2-5m | 3.12 | 2.25 | 0.07 |
+| 5-10m | 3.22 | 2.17 | -0.69 |
+| 10-20m | 5.34 | 4.19 | -2.16 |
+| 20-40m | 7.89 | 5.96 | -4.73 |
+| 40-infm | 35.76 | 23.99 | -22.36 |
+
+| City | pixels | RMSE | MAE | Corr |
+| --- | --- | --- | --- | --- |
+| DC | 94,633,984 | 4.46 | 2.63 | 0.888 |
+| NYC | 262,144,000 | 3.57 | 1.99 | 0.863 |
+| PHL | 393,216,000 | 3.70 | 1.25 | 0.849 |
+
+Test-time augmentation (800 test tiles): single pass RMSE 3.62 m → 8-view mean RMSE 3.48 m. Spearman correlation between the 8-view spread and the absolute error: 0.785.
+
+| spread decile (m) | MAE (m) | RMSE (m) |
+| --- | --- | --- |
+| 0.00–0.00 | — | — |
+| 0.00–0.00 | — | — |
+| 0.00–0.02 | 0.20 | 0.98 |
+| 0.02–0.05 | 0.39 | 1.28 |
+| 0.05–0.20 | 0.82 | 1.90 |
+| 0.20–0.36 | 1.36 | 2.23 |
+| 0.36–0.53 | 1.96 | 2.94 |
+| 0.53–0.76 | 2.63 | 3.78 |
+| 0.76–1.14 | 3.27 | 4.51 |
+| 1.14–34.71 | 5.15 | 8.04 |
+
+### v3a_small: breakdown
+
+| Class | RMSE | MAE | Bias | pixels |
+| --- | --- | --- | --- | --- |
+| others | 2.85 | 1.51 | 0.63 | 40,610,782 |
+| ground | 2.56 | 0.69 | 0.20 | 133,496,964 |
+| low_veg | 2.05 | 0.78 | 0.47 | 143,540,386 |
+| building | 6.16 | 2.92 | -0.92 | 153,945,680 |
+| water | 2.34 | 1.15 | 0.89 | 15,571,908 |
+| road | 2.37 | 0.86 | -0.04 | 110,430,278 |
+| tree | 5.13 | 3.86 | -1.43 | 152,397,986 |
+
+| True height band | RMSE | MAE | Bias |
+| --- | --- | --- | --- |
+| 0-2m | 1.98 | 0.72 | 0.55 |
+| 2-5m | 3.24 | 2.41 | 0.50 |
+| 5-10m | 3.21 | 2.22 | -0.45 |
+| 10-20m | 5.48 | 4.30 | -2.69 |
+| 20-40m | 9.32 | 7.63 | -6.62 |
+| 40-infm | 39.14 | 27.01 | -25.72 |
+
+| City | pixels | RMSE | MAE | Corr |
+| --- | --- | --- | --- | --- |
+| DC | 94,633,984 | 4.84 | 2.98 | 0.864 |
+| NYC | 262,144,000 | 3.84 | 2.21 | 0.836 |
+| PHL | 393,216,000 | 4.00 | 1.41 | 0.817 |
+
+Test-time augmentation (800 test tiles): single pass RMSE 3.91 m → 8-view mean RMSE 3.76 m. Spearman correlation between the 8-view spread and the absolute error: 0.788.
+
+| spread decile (m) | MAE (m) | RMSE (m) |
+| --- | --- | --- |
+| 0.00–0.01 | 0.25 | 0.97 |
+| 0.01–0.02 | 0.13 | 0.67 |
+| 0.02–0.03 | 0.23 | 0.92 |
+| 0.03–0.12 | 0.50 | 1.42 |
+| 0.12–0.33 | 1.06 | 2.05 |
+| 0.33–0.51 | 1.65 | 2.58 |
+| 0.51–0.72 | 2.23 | 3.29 |
+| 0.72–1.01 | 2.90 | 4.10 |
+| 1.01–1.50 | 3.58 | 4.86 |
+| 1.50–26.20 | 5.66 | 8.68 |
+
+### v3b_base: breakdown
+
+| Class | RMSE | MAE | Bias | pixels |
+| --- | --- | --- | --- | --- |
+| others | 2.48 | 1.21 | 0.23 | 40,610,782 |
+| ground | 2.49 | 0.56 | 0.05 | 133,496,964 |
+| low_veg | 1.94 | 0.64 | 0.28 | 143,540,386 |
+| building | 5.63 | 2.61 | -1.08 | 153,945,680 |
+| water | 2.35 | 1.13 | 0.86 | 15,571,908 |
+| road | 2.16 | 0.72 | -0.14 | 110,430,278 |
+| tree | 4.96 | 3.68 | -0.62 | 152,397,986 |
+
+| True height band | RMSE | MAE | Bias |
+| --- | --- | --- | --- |
+| 0-2m | 1.85 | 0.57 | 0.36 |
+| 2-5m | 3.24 | 2.31 | 0.19 |
+| 5-10m | 3.29 | 2.19 | -0.52 |
+| 10-20m | 5.37 | 4.21 | -1.84 |
+| 20-40m | 7.61 | 5.67 | -4.38 |
+| 40-infm | 36.33 | 25.10 | -23.64 |
+
+| City | pixels | RMSE | MAE | Corr |
+| --- | --- | --- | --- | --- |
+| DC | 94,633,984 | 4.47 | 2.65 | 0.887 |
+| NYC | 262,144,000 | 3.63 | 2.02 | 0.860 |
+| PHL | 393,216,000 | 3.74 | 1.26 | 0.846 |
+
+Test-time augmentation (800 test tiles): single pass RMSE 3.69 m → 8-view mean RMSE 3.51 m. Spearman correlation between the 8-view spread and the absolute error: 0.787.
+
+| spread decile (m) | MAE (m) | RMSE (m) |
+| --- | --- | --- |
+| 0.00–0.00 | — | — |
+| 0.00–0.01 | 0.19 | 0.93 |
+| 0.01–0.02 | 0.21 | 0.96 |
+| 0.02–0.05 | 0.41 | 1.35 |
+| 0.05–0.21 | 0.83 | 1.85 |
+| 0.21–0.38 | 1.36 | 2.20 |
+| 0.38–0.56 | 1.93 | 2.89 |
+| 0.56–0.79 | 2.62 | 3.80 |
+| 0.79–1.18 | 3.36 | 4.68 |
+| 1.18–38.95 | 5.25 | 8.14 |
+
+### v3c_base770: breakdown
+
+| Class | RMSE | MAE | Bias | pixels |
+| --- | --- | --- | --- | --- |
+| others | 2.32 | 1.10 | 0.01 | 40,610,782 |
+| ground | 2.32 | 0.49 | -0.05 | 133,496,964 |
+| low_veg | 1.67 | 0.53 | 0.14 | 143,540,386 |
+| building | 5.75 | 2.76 | -1.71 | 153,945,680 |
+| water | 2.28 | 1.12 | 0.84 | 15,571,908 |
+| road | 2.05 | 0.68 | -0.23 | 110,430,278 |
+| tree | 4.98 | 3.73 | -1.70 | 152,397,986 |
+
+| True height band | RMSE | MAE | Bias |
+| --- | --- | --- | --- |
+| 0-2m | 1.57 | 0.47 | 0.25 |
+| 2-5m | 2.83 | 2.04 | -0.27 |
+| 5-10m | 3.18 | 2.28 | -1.25 |
+| 10-20m | 5.57 | 4.49 | -3.00 |
+| 20-40m | 8.35 | 6.57 | -5.71 |
+| 40-infm | 37.02 | 26.23 | -25.09 |
+
+| City | pixels | RMSE | MAE | Corr |
+| --- | --- | --- | --- | --- |
+| DC | 94,633,984 | 4.45 | 2.63 | 0.890 |
+| NYC | 262,144,000 | 3.62 | 2.02 | 0.860 |
+| PHL | 393,216,000 | 3.73 | 1.26 | 0.858 |
+
+Test-time augmentation (300 test tiles): single pass RMSE 3.36 m → 8-view mean RMSE 3.25 m. Spearman correlation between the 8-view spread and the absolute error: 0.784.
+
+| spread decile (m) | MAE (m) | RMSE (m) |
+| --- | --- | --- |
+| 0.00–0.00 | — | — |
+| 0.00–0.00 | — | — |
+| 0.00–0.01 | 0.18 | 0.88 |
+| 0.01–0.05 | 0.41 | 1.37 |
+| 0.05–0.17 | 0.85 | 1.86 |
+| 0.17–0.31 | 1.43 | 2.17 |
+| 0.31–0.48 | 1.86 | 2.66 |
+| 0.48–0.73 | 2.45 | 3.44 |
+| 0.73–1.16 | 3.32 | 4.47 |
+| 1.16–17.39 | 5.01 | 7.36 |
+
 ## 2. Full pipeline (absolute DSM) vs USGS 3DEP LiDAR
 
-Input: NAIP 0.6 m RGB GeoTIFF (aerial, not satellite). Output compared with the 3DEP LiDAR top surface on its 2 m grid. Reference rule: the 3DEP DSM product under-records canopy/roof tops for some LiDAR projects (measured 7–16 m below DTM + height-above-ground on tree pixels; at the Kansas site an independent 1 m canopy map (Meta/WRI) gave 9.6 m on trees vs 10.9 m HAG vs 3.8 m DSM−DTM), so the reference is DTM + HAG where that lies 0–40 m above the DSM product, and the DSM product elsewhere. `ours` = FABDEM bare-earth terrain + predicted above-ground height. Datum-aligned rows remove one per-site vertical offset (NAVD88 vs EGM2008), estimated on LiDAR bare-ground pixels and applied equally to every method; that offset uses the reference, so treat it as an upper bound. `ours_5gcp` instead corrects the terrain with 5 ground-control points taken from LiDAR bare ground (no oracle offset). None of these sites are in the GAMUS training cities.
+Input: NAIP 0.6 m RGB GeoTIFF (aerial, not satellite). Output compared with the 3DEP LiDAR top surface on its 2 m grid. Reference rule: the 3DEP DSM product under-records canopy/roof tops for some LiDAR projects (measured 7–16 m below DTM + height-above-ground on tree pixels; at the Kansas site an independent 1 m canopy map (Meta/WRI) gave 9.6 m on trees vs 10.9 m HAG vs 3.8 m DSM−DTM), so the reference is DTM + HAG where that lies 0–40 m above the DSM product, and the DSM product elsewhere. One per-site vertical offset (NAVD88 vs EGM2008), estimated on LiDAR bare-ground pixels, is removed from every method alike. None of these sites are in any training set.
 
-| Site | Terrain | ours | ours + coarse-DEM scale | ours + 5 GCP | FABDEM only | Copernicus only | nDSM RMSE (ours / zero) | datum offset |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| sf_downtown | urban | 48.82 | 53.91 | 47.27 | 60.30 | 59.31 | 39.65 / 50.30 | 3.27 |
-| pittsburgh_hills | urban | 17.18 | 19.52 | 17.30 | 22.92 | 21.29 | 18.38 / 24.81 | -3.33 |
-| denver_midrise | urban | 26.24 | 29.92 | 26.15 | 36.59 | 34.37 | 23.68 / 31.52 | 1.48 |
-| kansas_farmland | sparse | 2.27 | 2.97 | 2.38 | 4.99 | 3.18 | 2.40 / 5.92 | -0.28 |
-| texas_sparse | sparse | 3.46 | 1.60 | 3.33 | 1.81 | 1.41 | 3.13 / 1.89 | 0.33 |
-| smoky_forest | forest | 19.76 | 12.91 | — | 27.38 | 10.81 | 23.20 / 31.17 | 0.00 |
-| colorado_rockies | hilly | 8.78 | 7.74 | 7.94 | 10.00 | 6.34 | 8.87 / 10.11 | -0.07 |
-| vermont_forest | forest | 5.39 | 5.01 | 5.57 | 7.58 | 4.86 | 6.32 / 9.00 | 0.10 |
+| Site | Terrain | ensemble v3a-base+base-main+v3a-small | ensemble v3a-base+base-main | ensemble v3a-base+mixed-base | ensemble v3a-base+v3a-small | base-main | mixed-base | v3a-base | v3a-small | FABDEM only | Copernicus only |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| colorado_rockies | hilly | 6.55 | 6.69 | 5.47 | 6.25 | 7.21 | 4.82 | 6.22 | 6.29 | 10.00 | 6.34 |
+| denver_midrise | urban | 23.66 | 23.13 | 22.97 | 23.26 | 25.19 | 24.86 | 21.96 | 25.28 | 36.59 | 34.37 |
+| kansas_farmland | sparse | 3.87 | 3.36 | 5.39 | 4.87 | 2.38 | 6.05 | 4.78 | 5.01 | 4.99 | 3.18 |
+| pittsburgh_hills | urban | 14.36 | 14.12 | 13.93 | 13.66 | 16.52 | 16.10 | 12.72 | 15.13 | 22.92 | 21.29 |
+| sf_downtown | urban | 41.33 | 41.47 | 41.11 | 38.69 | 48.04 | 47.31 | 36.69 | 41.59 | 60.30 | 59.31 |
+| smoky_forest | forest | 18.65 | 19.74 | 17.32 | 17.45 | 21.18 | 16.34 | 18.37 | 16.56 | 27.38 | 10.81 |
+| texas_sparse | sparse | 3.81 | 3.80 | 4.16 | 3.98 | 3.61 | 4.26 | 4.10 | 3.89 | 1.81 | 1.41 |
+| vermont_forest | forest | 7.63 | 6.55 | 11.89 | 10.73 | 4.52 | 12.42 | 11.41 | 10.08 | 7.58 | 4.86 |
 
-RMSE (m), datum-aligned. Mean over sites per terrain type:
+RMSE (m). 'terrain-balanced' averages the four terrain types equally; 'worst site' is the maximum over sites.
 
-| Terrain | sites | ours | ours + 5 GCP | FABDEM only | Copernicus only |
-| --- | --- | --- | --- | --- | --- |
-| urban | 3 | 30.75 | 30.24 | 39.94 | 38.33 |
-| sparse | 2 | 2.87 | 2.85 | 3.40 | 2.30 |
-| forest | 2 | 12.57 | 5.57 | 17.48 | 7.83 |
-| hilly | 1 | 8.78 | 7.94 | 10.00 | 6.34 |
+| Method | mean | terrain-balanced | worst site | forest | hilly | sparse | urban |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| v3a-base | 14.53 | 12.34 | 36.69 | 14.89 | 6.22 | 4.44 | 23.79 |
+| ensemble v3a-base+base-main | 14.86 | 12.41 | 41.47 | 13.15 | 6.69 | 3.58 | 26.24 |
+| ensemble v3a-base+v3a-small | 14.86 | 12.49 | 38.69 | 14.09 | 6.25 | 4.43 | 25.20 |
+| ensemble v3a-base+base-main+v3a-small | 14.98 | 12.50 | 41.33 | 13.14 | 6.55 | 3.84 | 26.45 |
+| ensemble v3a-base+mixed-base | 15.28 | 12.71 | 41.11 | 14.61 | 5.47 | 4.78 | 26.00 |
+| v3a-small | 15.48 | 12.85 | 41.59 | 13.32 | 6.29 | 4.45 | 27.33 |
+| base-main | 16.08 | 13.24 | 48.04 | 12.85 | 7.21 | 3.00 | 29.92 |
+| mixed-base | 16.52 | 13.44 | 47.31 | 14.38 | 4.82 | 5.15 | 29.42 |
+| Copernicus 30 m only | 17.70 | 13.70 | 59.31 | 7.83 | 6.34 | 2.30 | 38.33 |
+| FABDEM 30 m only | 21.45 | 17.70 | 60.30 | 17.48 | 10.00 | 3.40 | 39.94 |
 
 Sites excluded automatically because the reference LiDAR itself failed a consistency check:
 
-- `nebraska_farmland` (sparse): LiDAR DSM sits 7.1 m above its own DTM on ground pixels (inconsistent products)
 - `boulder_foothills` (hilly): LiDAR bare earth differs from FABDEM by 1936 m (mislabelled elevations)
+- `nebraska_farmland` (sparse): LiDAR DSM sits 7.1 m above its own DTM on ground pixels (inconsistent products)
 
-MAE and correlation per site and method are in `runs/bench/bench_results.json`.
+Per-site MAE, bias and correlation for every method are in `docs/data/bench_*.json`.
 
 ## 3. Held-out rural / forest / hilly regions (NAIP + 3DEP LiDAR)
 
@@ -313,7 +577,11 @@ MAE and correlation per site and method are in `runs/bench/bench_results.json`.
 | --- | --- | --- | --- | --- | --- |
 | base-main | 5.66 | 3.81 | -1.78 | 0.606 | 11.77 (-10.84) |
 | small-main | 6.14 | 4.06 | -1.82 | 0.529 | 11.47 (-10.76) |
+| mixed_base (trained with rural set) | 5.40 | 2.78 | 1.39 | 0.741 | 3.87 (-1.77) |
 | mixed_small (trained with rural set) | 5.85 | 3.11 | 1.30 | 0.691 | 4.36 (-2.84) |
+| mixed_v2 (trained with rural set) | 5.25 | 2.80 | 0.26 | 0.697 | 6.80 (-5.73) |
+| v3a_base (trained with rural set) | 5.11 | 2.58 | 0.80 | 0.743 | 4.56 (-2.45) |
+| v3a_small (trained with rural set) | 4.60 | 2.81 | 0.22 | 0.757 | 6.45 (-5.29) |
 
 ## 4. Robustness to coarser imagery (augmentation ablation)
 

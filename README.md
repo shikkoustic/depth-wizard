@@ -41,17 +41,34 @@ depthwizard process scene.tif -o out/ --gcps gcps.csv          # terrain correct
 
 ## Headline measured results
 
-On the GAMUS test split (2,861 tiles, never used for training or model selection), compared with baselines on the same tiles:
+Everything below is measured on data no model trained on, and is regenerated from result files by `bench/report.py`
+into [docs/RESULTS.md](docs/RESULTS.md).
+
+**1. Above-ground height, GAMUS test split (2,861 tiles):**
 
 | Method | RMSE (m) | MAE (m) | Correlation |
 |---|---|---|---|
-| DepthWizard, Depth Anything V2 Base | **3.85** | **1.69** | **0.856** |
-| DepthWizard, Depth Anything V2 Small (default: runs on a laptop CPU) | 4.07 | 1.79 | 0.837 |
+| DepthWizard (Depth Anything V2 Base, final model) | **3.76** | **1.68** | **0.864** |
 | Zero-shot Depth Anything V2 + global scale fit | 7.29 | 4.79 | 0.276 |
 | Per-tile mean height (oracle: knows each tile's true mean) | 6.24 | 4.08 | — |
 | Predict 0 m | 8.62 | 4.43 | — |
 
-The full pipeline was also run on NAIP GeoTIFFs and scored against USGS 3DEP LiDAR at sites outside the training cities. Per site and per terrain type, see [docs/RESULTS.md](docs/RESULTS.md). Measured strengths and weaknesses are stated there, including where a plain 30 m DEM does better.
+**2. Full pipeline (absolute DSM) vs USGS 3DEP LiDAR, 8 sites outside every training set** — RMSE (m):
+
+| Method | mean | terrain-balanced | worst site | urban | hilly | forest | sparse |
+|---|---|---|---|---|---|---|---|
+| **DepthWizard** | **14.53** | **12.34** | **36.69** | **23.79** | **6.22** | 14.89 | 4.44 |
+| Copernicus GLO-30 alone | 17.70 | 13.70 | 59.31 | 38.33 | 6.34 | **7.83** | 2.30 |
+| FABDEM 30 m alone | 21.45 | 17.70 | 60.30 | 39.94 | 10.00 | 17.48 | **3.40** |
+
+We beat both 30 m DEMs overall and in cities, match them on hills, and still lose on dense forest canopy and flat
+farmland, where a radar DEM is hard to beat. Adding real downtown training data cut held-out city error by 28 %
+(12.16 → 8.77 m) and more than halved the skyscraper bias (−38.7 → −16.1 m).
+
+**3. Robustness to coarser imagery** (GAMUS test tiles degraded to 1.3 m and 2 m, as pan-sharpened satellite
+imagery would appear): RMSE stays 5.9 → 6.2 m with our blur augmentation, against 5.9 → 12.0 m without it.
+
+**4. Uncertainty map**: the spread across 8 flipped/rotated predictions tracks the real error (Spearman 0.78).
 
 ## Repository layout
 
