@@ -17,7 +17,7 @@ for k, v in (("GDAL_HTTP_TIMEOUT", "60"), ("GDAL_HTTP_MAX_RETRY", "4"), ("GDAL_H
              ("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR"), ("VSI_CACHE", "TRUE")):
     os.environ.setdefault(k, v)
 OUT = os.environ.get("NAIP_OUT", "/kaggle/working"); T0 = time.time(); S = 512; GSD = 0.66
-N_ITEMS, TILES_PER_ITEM = int(os.environ.get("NAIP_ITEMS", 90)), int(os.environ.get("NAIP_TILES", 14))
+N_ITEMS, TILES_PER_ITEM = int(os.environ.get("NAIP_ITEMS", 220)), int(os.environ.get("NAIP_TILES", 18))
 BENCH = [(-122.400, 37.790), (-80.005, 40.444), (-104.993, 39.746), (-97.185, 38.154), (-96.935, 40.884),
          (-98.275, 29.264), (-105.275, 39.979), (-105.525, 39.824), (-83.165, 37.414), (-83.510, 35.604),
          (-77.555, 41.324), (-72.715, 43.894), (-119.915, 39.034)]
@@ -42,7 +42,7 @@ def near_bench(bb):
 
 # ---- 1. discover LiDAR tiles spread over the contiguous US ----
 items, seen, tries = [], set(), 0
-while len(items) < N_ITEMS * 2 and tries < 900:
+while len(items) < N_ITEMS * 2 and tries < 2200:
     tries += 1
     lon, lat = random.uniform(-123.5, -68.0), random.uniform(26.0, 48.5)
     try:

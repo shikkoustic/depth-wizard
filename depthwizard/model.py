@@ -83,6 +83,27 @@ class HeightModel:
         return p.float().cpu().numpy()
 
     def _predict_tile(self, t, n_tta):
+        """Optionally average over input scales too (DEPTHWIZARD_SCALES="0.7,1,1.4"): structures whose size
+        differs from the training scale are then seen at a familiar size by at least one pass."""
+        scales = [float(x) for x in os.environ.get("DEPTHWIZARD_SCALES", "1").split(",") if x]
+        if len(scales) > 1:
+            import numpy as _np
+            outs = []
+            for sc in scales:
+                if sc == 1:
+                    m, s = self._predict_tile_at(t, n_tta); outs.append((m, s)); continue
+                c = int(round(TILE / sc))
+                if c < 64: continue
+                t2 = _np.stack([_np.asarray(__import__("PIL.Image", fromlist=["Image"]).Image.fromarray((ch * 255).astype("uint8")).resize((c, c))) / 255.
+                                for ch in t]).astype("float32")
+                m, sd = self._predict_tile_at(t2, n_tta)
+                back = lambda a: _np.asarray(__import__("PIL.Image", fromlist=["Image"]).Image.fromarray(a).resize((TILE, TILE)))
+                outs.append((back(m), back(sd)))
+            ms = _np.stack([o[0] for o in outs]); ss = _np.stack([o[1] for o in outs])
+            return ms.mean(0), _np.sqrt((ss ** 2).mean(0) + ms.var(0))  # scale disagreement adds to uncertainty
+        return self._predict_tile_at(t, n_tta)
+
+    def _predict_tile_at(self, t, n_tta):
         """t: (3,512,512) float. Returns mean and std over n_tta dihedral variants (std=0 if n_tta==1)."""
         variants = [(k, f) for f in (False, True) for k in range(4)][:max(1, n_tta)]
         xs = []

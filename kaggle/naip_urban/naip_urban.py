@@ -57,7 +57,7 @@ CITIES = {  # downtown centres with USGS 3DEP coverage on Planetary Computer (ch
     "st_louis": (-90.190, 38.627), "indianapolis": (-86.158, 39.768), "milwaukee": (-87.906, 43.039), "baltimore": (-76.612, 39.290),
     "new_orleans": (-90.071, 29.951), "tampa": (-82.458, 27.950), "jacksonville": (-81.656, 30.329), "san_diego": (-117.161, 32.716)}
 SPLIT = {"dallas": "test", "charlotte": "test", "nashville": "val", "st_louis": "val"}
-PER_CITY = int(os.environ.get("URBAN_TILES", 26)); RADIUS_DEG = 0.012  # ~1.3 km around the centre
+PER_CITY = int(os.environ.get("URBAN_TILES", 110)); RADIUS_DEG = 0.02  # ~2.2 km around the centre
 
 def city_tiles(name):
     cx, cy = CITIES[name]
@@ -99,6 +99,13 @@ def city_tiles(name):
                 with rasterio.open(fabdem_url(math.floor((geo[1] + geo[3]) / 2), math.floor((geo[0] + geo[2]) / 2))) as fb:
                     reproject(rasterio.band(fb, 1), fab, dst_transform=wtr, dst_crs=dsm.crs, resampling=Resampling.bilinear, dst_nodata=np.nan)
                 off = float(np.nanmedian(b - fab))
+                if np.isfinite(off) and abs(off) > 5:
+                    # some older projects store elevations in US survey feet: check the ratio before giving up
+                    ratio = float(np.nanmedian(b / np.where(np.abs(fab) > 20, fab, np.nan)))
+                    if 3.1 < ratio < 3.45:
+                        a, b, h = a / 3.2808399, b / 3.2808399, h / 3.2808399
+                        off = float(np.nanmedian(b - fab))
+                        reasons["converted from feet"] = reasons.get("converted from feet", 0) + 1
                 if not np.isfinite(off) or abs(off) > 5:
                     reasons["DTM off FABDEM"] = reasons.get("DTM off FABDEM", 0) + 1; continue
                 # robust ground: LiDAR DTM unless it sits > 4 m above FABDEM (building remnants under towers)
