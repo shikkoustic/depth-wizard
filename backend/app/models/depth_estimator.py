@@ -128,16 +128,28 @@ class DepthEstimator:
                 # Bilateral filter preserves structural building edges and flattens roofs
                 filtered = cv2.bilateralFilter(pred_metric, d=5, sigmaColor=2.5, sigmaSpace=4.0)
 
-                # Ground flattening for neutral asphalt/roads
+                # Ground flattening for asphalt/roads and shadow pit suppression
                 r = rgb_image[:, :, 0].astype(np.float32)
                 g = rgb_image[:, :, 1].astype(np.float32)
                 b = rgb_image[:, :, 2].astype(np.float32)
                 gray = 0.299 * r + 0.587 * g + 0.114 * b
-                is_road = (gray < 72.0) & (np.abs(r - g) < 14.0) & (np.abs(g - b) < 14.0)
-                filtered[is_road] = 0.0
+                exg = 2.0 * g - r - b
+                is_veg = (exg > 15.0) & (g > 55.0)
 
-                if target_max_height is not None and target_max_height > 0:
+                # Roads & smooth ground: dark/neutral hue, but NEVER suppress vegetation or roofs
+                is_ground_plane = (gray < 72.0) & (np.abs(r - g) < 14.0) & (np.abs(g - b) < 14.0) & (~is_veg)
+                # Only clamp ground plane if the model predicted a small noise height (< 1.8m)
+                filtered[is_ground_plane & (filtered < 1.8)] = 0.0
+
+                # Deep shadow pit mitigation: prevent shadows adjacent to tall walls from predicting false craters
+                is_deep_shadow = (gray < 35.0) & (~is_veg)
+                filtered[is_deep_shadow & (filtered < 0.5)] = 0.0
+
+                # Natural height preservation: do not cap tall skyscrapers unless explicitly requested
+                if target_max_height is not None and target_max_height > 0 and not self.has_finetuned_weights:
                     filtered = np.clip(filtered, 0.0, target_max_height)
+                else:
+                    filtered = np.clip(filtered, 0.0, 350.0)
 
                 return filtered.astype(np.float32)
             except Exception as e:
