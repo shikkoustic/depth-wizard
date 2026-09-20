@@ -66,3 +66,4 @@ class EvaluationResponse(BaseModel):
     datum_offset_adjusted: Optional[float] = None
     breakdown: Dict[str, Any]
     baselines: List[BaselineItem]
+    height_bands: Optional[Dict[str, Any]] = None

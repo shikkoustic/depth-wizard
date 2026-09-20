@@ -384,7 +384,8 @@ async def evaluate_metrics(
         valid_pixel_count=results["valid_pixel_count"],
         datum_offset_adjusted=results.get("datum_offset_adjusted"),
         breakdown=results["breakdown"],
-        baselines=results["baselines"]
+        baselines=results["baselines"],
+        height_bands=results.get("height_bands")
     )
 
 

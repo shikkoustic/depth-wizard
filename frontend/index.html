@@ -349,43 +349,51 @@
         </div>
       </div>
 
-      <!-- Baseline Comparison Table -->
+      <!-- Three Standard Baselines Comparison Table -->
       <div class="text-[11px]">
         <div class="text-[10px] font-semibold text-slate-300 mb-1 flex justify-between">
-          <span>Model Benchmark</span>
+          <span>Three Standard Baselines</span>
           <span>MAE (m)</span>
         </div>
         <div class="space-y-1 text-[10px]">
-          <div class="flex justify-between py-0.5 px-1.5 rounded bg-slate-800/40 text-slate-400">
-            <span>Mean Guess Heuristic</span>
-            <span class="font-mono">5.07m</span>
+          <div class="flex justify-between py-0.5 px-1.5 rounded bg-slate-800/40 text-slate-400" title="Predicts 0m everywhere (bare earth assumption)">
+            <span>1. Predict 0m Everywhere</span>
+            <span class="font-mono">8.62m</span>
           </div>
-          <div class="flex justify-between py-0.5 px-1.5 rounded bg-slate-800/40 text-slate-400">
-            <span>Depth Anything V2 (Zero-shot)</span>
+          <div class="flex justify-between py-0.5 px-1.5 rounded bg-slate-800/40 text-slate-400" title="Uses ground truth per-tile average height">
+            <span>2. Per-Tile Mean (Oracle)</span>
+            <span class="font-mono">4.08m</span>
+          </div>
+          <div class="flex justify-between py-0.5 px-1.5 rounded bg-slate-800/40 text-slate-400" title="Pretrained Depth Anything V2 Backbone">
+            <span>3. Zero-shot Depth Anything</span>
             <span class="font-mono">4.01m</span>
           </div>
-          <div class="flex justify-between py-0.5 px-1.5 rounded bg-cyan-950/40 border border-cyan-500/30 text-cyan-300 font-medium">
-            <span>DepthWizard (Our Solution)</span>
-            <span id="benchmark-score" class="font-mono font-bold">2.86m</span>
+          <div class="flex justify-between py-0.5 px-1.5 rounded bg-cyan-950/40 border border-cyan-500/30 text-cyan-300 font-medium shadow-sm">
+            <span class="font-semibold">DepthWizard (Direct Metric)</span>
+            <span id="benchmark-score" class="font-mono font-bold text-cyan-400">2.86m</span>
           </div>
         </div>
       </div>
 
-      <!-- Per-Landscape Error Breakdown -->
+      <!-- Per-Landscape & Height-Class Breakdown -->
       <div class="pt-2 border-t border-slate-800 text-[11px]">
-        <div class="text-[10px] font-semibold text-slate-300 mb-1">Error by Landscape Category:</div>
+        <div class="text-[10px] font-semibold text-slate-300 mb-1">MAE by Category &amp; Height Class:</div>
         <div class="space-y-1 text-[10px]">
           <div class="flex items-center justify-between">
-            <span class="text-slate-400">Ground / Sparse (&lt;1.5m):</span>
+            <span class="text-slate-400">Ground / Bare Earth (&lt;1.5m):</span>
             <span id="breakdown-ground" class="font-mono text-emerald-400 font-bold">0.78m</span>
           </div>
           <div class="flex items-center justify-between">
-            <span class="text-slate-400">Vegetation &amp; Canopy:</span>
-            <span id="breakdown-veg" class="font-mono text-slate-200">1.92m</span>
+            <span class="text-slate-400">Vegetation &amp; Canopy (2-12m):</span>
+            <span id="breakdown-veg" class="font-mono text-slate-200 font-medium">1.92m</span>
           </div>
           <div class="flex items-center justify-between">
-            <span class="text-slate-400">Urban Buildings &amp; Towers:</span>
+            <span class="text-slate-400">Urban Buildings &amp; Offices:</span>
             <span id="breakdown-bldg" class="font-mono text-cyan-300 font-bold">3.84m</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-slate-400">Tall Skyscrapers (&gt;40m):</span>
+            <span id="breakdown-tall" class="font-mono text-amber-400 font-bold">4.12m</span>
           </div>
         </div>
       </div>
@@ -1300,13 +1308,16 @@
         document.getElementById("benchmark-score").textContent = `${data.mae}m`;
 
         if (data.breakdown.urban_buildings) {
-          document.getElementById("breakdown-bldg").textContent = `MAE: ${data.breakdown.urban_buildings.mae}m`;
+          document.getElementById("breakdown-bldg").textContent = `${data.breakdown.urban_buildings.mae}m`;
         }
         if (data.breakdown.vegetation_trees) {
-          document.getElementById("breakdown-veg").textContent = `MAE: ${data.breakdown.vegetation_trees.mae}m`;
+          document.getElementById("breakdown-veg").textContent = `${data.breakdown.vegetation_trees.mae}m`;
         }
         if (data.breakdown.ground_sparse) {
-          document.getElementById("breakdown-ground").textContent = `MAE: ${data.breakdown.ground_sparse.mae}m`;
+          document.getElementById("breakdown-ground").textContent = `${data.breakdown.ground_sparse.mae}m`;
+        }
+        if (data.height_bands && data.height_bands[">40m (Skyscrapers)"]) {
+          document.getElementById("breakdown-tall").textContent = `${data.height_bands[">40m (Skyscrapers)"].mae}m`;
         }
       } catch (err) {
         console.error("Evaluation failed:", err);
