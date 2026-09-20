@@ -25,10 +25,19 @@ STAC = "https://planetarycomputer.microsoft.com/api/stac/v1"
 random.seed(0); np.random.seed(0)
 def log(*a): print(f"[{(time.time()-T0)/60:6.1f}m]", *a, flush=True)
 
+def _retry(fn, tries=4):
+    for k in range(tries):
+        try:
+            return fn()
+        except Exception:
+            if k == tries - 1:
+                raise
+            time.sleep(2 * (k + 1))
+
 def post(url, body):
     req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
-    return json.load(urllib.request.urlopen(req, timeout=120))
-def get(url): return json.load(urllib.request.urlopen(url, timeout=120))
+    return _retry(lambda: json.load(urllib.request.urlopen(req, timeout=120)))  # the STAC API returns the odd 502
+def get(url): return _retry(lambda: json.load(urllib.request.urlopen(url, timeout=120)))
 _tok = {}
 def sign(href):
     acct, cont = href.split("//")[1].split(".")[0], href.split("blob.core.windows.net/")[1].split("/")[0]
