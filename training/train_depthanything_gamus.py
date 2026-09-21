@@ -85,6 +85,14 @@ class MetricCharbonnierLoss(nn.Module):
         charb = torch.sqrt(diff ** 2 + self.eps_sq)
         charb_loss = (charb * w * valid).sum() / (w * valid).sum().clamp(min=1.0)
 
+        # Category 4 Enhancement: Log-Charbonnier relative loss for structures >20m (stabilizes 50m-200m skyscraper gradients)
+        is_tall = (y_val > 20.0) & valid
+        if torch.any(is_tall):
+            log_diff = torch.log(pred[is_tall] + 1.0) - torch.log(y_val[is_tall] + 1.0)
+            log_loss = torch.sqrt(log_diff ** 2 + self.eps_sq).mean() * 1.5
+        else:
+            log_loss = 0.0
+
         # Category 1: Bare Earth Flatness (suppress shadow craters on terrain < 1.5m)
         is_ground = (y_val < 1.5) & valid
         if torch.any(is_ground):
@@ -98,8 +106,8 @@ class MetricCharbonnierLoss(nn.Module):
         # Category 3: Building Parapet Multi-Scale Edge Loss
         if self.grad_weight > 0:
             g_loss = self.multi_scale_grad_loss(pred, y_val, valid)
-            return charb_loss + self.grad_weight * g_loss + tv_loss
-        return charb_loss + tv_loss
+            return charb_loss + self.grad_weight * g_loss + tv_loss + log_loss
+        return charb_loss + tv_loss + log_loss
 
 
 def apply_blur_augmentation(x: "torch.Tensor", p: float = 0.5) -> "torch.Tensor":

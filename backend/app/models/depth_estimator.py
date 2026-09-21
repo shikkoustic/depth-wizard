@@ -145,6 +145,12 @@ class DepthEstimator:
                 is_deep_shadow = (gray < 35.0) & (~is_veg)
                 filtered[is_deep_shadow & (filtered < 0.5)] = 0.0
 
+                # Texture Energy (Laplacian) to separate smooth grass (<0.8m) from tall tree crowns (2-12m)
+                laplacian = cv2.Laplacian(gray, cv2.CV_32F)
+                texture_energy = cv2.GaussianBlur(np.abs(laplacian), (5, 5), 1.5)
+                is_flat_grass = is_veg & (texture_energy < 4.5) & (filtered < 2.2)
+                filtered[is_flat_grass] = np.clip(filtered[is_flat_grass] * 0.35, 0.0, 0.75)
+
                 # Natural height preservation: do not cap tall skyscrapers unless explicitly requested
                 if target_max_height is not None and target_max_height > 0 and not self.has_finetuned_weights:
                     filtered = np.clip(filtered, 0.0, target_max_height)
