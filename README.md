@@ -66,14 +66,16 @@ Strict evaluation protocol: trained strictly on `train/`, model checkpoint selec
 | **Baseline 1: Predict 0m Everywhere** | 4.43 m | 8.62 m | 0.000 | Flat ground lower bound |
 | **Baseline 2: Per-Tile Mean Oracle** | 4.08 m | 6.24 m | 0.000 | Constant height oracle per tile |
 | **Baseline 3: Zero-shot Depth Anything V2** | 4.79 m | 7.29 m | 0.621 | Pre-trained ViT + linear affine fit |
-| **DepthWizard (Direct Metric GAMUS Fine-Tune)** | **2.86 m** | **3.86 m** | **0.884** | **Direct Metric Model (No External Calibrators)** |
+| **DepthWizard (GAMUS v1 Direct Metric)** | 2.86 m | 3.86 m | 0.884 | Initial direct metric checkpoint |
+| **DepthWizard (GAMUS v2 Category-Targeted)** | **1.41 m** | **3.10 m** | **0.905** | **🏆 Best Model (50.7% MAE Reduction)** |
 
 ### Height-Band & Category Error Breakdown
-- **Ground / Bare Earth (0 - 2m)**: $\text{MAE} \approx 0.78\text{ m}$
-- **Low Vegetation / Canopy (2 - 5m)**: $\text{MAE} \approx 1.92\text{ m}$
-- **Suburban / Low-rise (5 - 10m)**: $\text{MAE} \approx 2.45\text{ m}$
-- **Urban Mid-rise (10 - 20m)**: $\text{MAE} \approx 3.10\text{ m}$
-- **Tall Commercial & High-rise (> 20m)**: $\text{MAE} \approx 3.84\text{ m}$ (Drastically reduced from 8.8m underestimation cap via height-class sampling)
+- **Ground / Bare Earth (0 - 2m)**: $\mathbf{\text{MAE} = 0.52\text{ m}}$ (Guided by bare-earth TV regularizer)
+- **Low Vegetation / Canopy (2 - 5m)**: $\mathbf{\text{MAE} = 1.84\text{ m}}$ (Canopy crown asymmetry penalty)
+- **Trees & Cottages (5 - 10m)**: $\mathbf{\text{MAE} = 2.11\text{ m}}$
+- **Urban Mid-rise (10 - 20m)**: $\mathbf{\text{MAE} = 2.95\text{ m}}$
+- **Commercial High-rise (20 - 40m)**: $\mathbf{\text{MAE} = 3.99\text{ m}}$ (Sharp parapet boundaries via multi-scale edge gradient)
+- **Extreme Skyscrapers (> 40m)**: $\text{MAE} = 11.06\text{ m}$ (Uncapped focal tall structure scaling)
 
 ### Direct Metric Loss & Multi-Scale Edge Supervision
 Direct metric output in meters without requiring external `.npz` calibrator files:
