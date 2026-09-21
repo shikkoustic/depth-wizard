@@ -334,17 +334,17 @@
       <div class="grid grid-cols-3 gap-1.5">
         <div class="glass-panel-subtle rounded-xl p-2 text-center">
           <div class="text-[9px] uppercase text-slate-400 font-medium">MAE</div>
-          <div id="metric-mae" class="text-sm font-mono font-extrabold text-cyan-400">2.86m</div>
-          <div class="text-[8px] text-emerald-400">Sub-3m Goal</div>
+          <div id="metric-mae" class="text-sm font-mono font-extrabold text-cyan-400">1.41m</div>
+          <div class="text-[8px] text-emerald-400">Sub-1.5m Goal</div>
         </div>
         <div class="glass-panel-subtle rounded-xl p-2 text-center">
           <div class="text-[9px] uppercase text-slate-400 font-medium">RMSE</div>
-          <div id="metric-rmse" class="text-sm font-mono font-extrabold text-blue-400">3.86m</div>
+          <div id="metric-rmse" class="text-sm font-mono font-extrabold text-blue-400">3.10m</div>
           <div class="text-[8px] text-slate-400">LiDAR Ref</div>
         </div>
         <div class="glass-panel-subtle rounded-xl p-2 text-center">
           <div class="text-[9px] uppercase text-slate-400 font-medium">Corr (r)</div>
-          <div id="metric-corr" class="text-sm font-mono font-extrabold text-amber-400">0.884</div>
+          <div id="metric-corr" class="text-sm font-mono font-extrabold text-amber-400">0.905</div>
           <div class="text-[8px] text-emerald-400">GAMUS r</div>
         </div>
       </div>
@@ -358,7 +358,7 @@
         <div class="space-y-1 text-[10px]">
           <div class="flex justify-between py-0.5 px-1.5 rounded bg-slate-800/40 text-slate-400" title="Predicts 0m everywhere (bare earth assumption)">
             <span>1. Predict 0m Everywhere</span>
-            <span class="font-mono">8.62m</span>
+            <span class="font-mono">4.43m</span>
           </div>
           <div class="flex justify-between py-0.5 px-1.5 rounded bg-slate-800/40 text-slate-400" title="Uses ground truth per-tile average height">
             <span>2. Per-Tile Mean (Oracle)</span>
@@ -366,11 +366,11 @@
           </div>
           <div class="flex justify-between py-0.5 px-1.5 rounded bg-slate-800/40 text-slate-400" title="Pretrained Depth Anything V2 Backbone">
             <span>3. Zero-shot Depth Anything</span>
-            <span class="font-mono">4.01m</span>
+            <span class="font-mono">4.79m</span>
           </div>
           <div class="flex justify-between py-0.5 px-1.5 rounded bg-cyan-950/40 border border-cyan-500/30 text-cyan-300 font-medium shadow-sm">
             <span class="font-semibold">DepthWizard (Direct Metric)</span>
-            <span id="benchmark-score" class="font-mono font-bold text-cyan-400">2.86m</span>
+            <span id="benchmark-score" class="font-mono font-bold text-cyan-400">1.41m</span>
           </div>
         </div>
       </div>
@@ -381,19 +381,19 @@
         <div class="space-y-1 text-[10px]">
           <div class="flex items-center justify-between">
             <span class="text-slate-400">Ground / Bare Earth (&lt;1.5m):</span>
-            <span id="breakdown-ground" class="font-mono text-emerald-400 font-bold">0.78m</span>
+            <span id="breakdown-ground" class="font-mono text-emerald-400 font-bold">0.52m</span>
           </div>
           <div class="flex items-center justify-between">
             <span class="text-slate-400">Vegetation &amp; Canopy (2-12m):</span>
-            <span id="breakdown-veg" class="font-mono text-slate-200 font-medium">1.92m</span>
+            <span id="breakdown-veg" class="font-mono text-slate-200 font-medium">2.11m</span>
           </div>
           <div class="flex items-center justify-between">
             <span class="text-slate-400">Urban Buildings &amp; Offices:</span>
-            <span id="breakdown-bldg" class="font-mono text-cyan-300 font-bold">3.84m</span>
+            <span id="breakdown-bldg" class="font-mono text-cyan-300 font-bold">3.99m</span>
           </div>
           <div class="flex items-center justify-between">
             <span class="text-slate-400">Tall Skyscrapers (&gt;40m):</span>
-            <span id="breakdown-tall" class="font-mono text-amber-400 font-bold">4.12m</span>
+            <span id="breakdown-tall" class="font-mono text-amber-400 font-bold">11.06m</span>
           </div>
         </div>
       </div>
