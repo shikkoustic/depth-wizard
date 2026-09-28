@@ -102,6 +102,11 @@ h2::before {
 label { display: block; margin: 7px 0; color: var(--text); font-size: 12px; }
 label.chk { display: flex; align-items: center; gap: 7px; }
 select, input[type=number] {
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2338bdf8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 30px;
   width: 100%;
   background: rgba(10,15,30,0.7);
   color: var(--text);

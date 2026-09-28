@@ -143,10 +143,12 @@ export function buildTerrain(scene, heights, { photo, maxVerts = 1_500_000, base
   geo.computeBoundingBox(); geo.computeBoundingSphere();
 
   if (!shared.mask) {
-    const m = new Uint8Array(W * H);
-    for (let i = 0; i < m.length; i++) m[i] = Number.isFinite(heights[i]) ? 255 : 0;
-    shared.mask = new THREE.DataTexture(m, W, H, THREE.RedFormat, THREE.UnsignedByteType);
-    shared.mask.unpackAlignment = 1; // width is rarely a multiple of 4
+    const m = new Uint8Array(W * H * 4);
+    for (let i = 0; i < (W * H); i++) {
+      const v = Number.isFinite(heights[i]) ? 255 : 0;
+      m[i * 4] = v; m[i * 4 + 1] = v; m[i * 4 + 2] = v; m[i * 4 + 3] = v;
+    }
+    shared.mask = new THREE.DataTexture(m, W, H, THREE.RGBAFormat, THREE.UnsignedByteType);
     shared.mask.needsUpdate = true;
   }
   const mat = new THREE.ShaderMaterial({

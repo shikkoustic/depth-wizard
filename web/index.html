@@ -23,12 +23,14 @@
         <select id="scene-select"><option value="">— choose a processed scene —</option></select>
         <label class="upload" style="margin-top:8px">
           <input type="file" id="upload" accept=".tif,.tiff,.png,.jpg,.jpeg" />
-          <div style="font-size:22px;margin-bottom:4px">🛰️</div>
-          <span>Upload image (GeoTIFF / PNG / JPG)</span>
-          <div style="font-size:10px;margin-top:4px;color:var(--accent)">Drag & drop supported</div>
+          <div style="margin-bottom:6px; color: var(--accent);">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          </div>
+          <span style="font-weight: 500;">Upload image (GeoTIFF / PNG / JPG)</span>
+          <div style="font-size:10px;margin-top:4px;color:var(--muted)">Drag & drop supported</div>
         </label>
         <details id="upload-opts">
-          <summary>⚙️ Advanced options</summary>
+          <summary style="display:flex; align-items:center; gap:6px;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg> Advanced options</summary>
           <label>Reference DSM (optional GeoTIFF) <input type="file" id="upload-ref" accept=".tif,.tiff" /></label>
           <label>Terrain DEM override (optional GeoTIFF) <input type="file" id="upload-dem" accept=".tif,.tiff" /></label>
           <label>Ground-control points CSV (x,y,z) <input type="file" id="upload-gcp" accept=".csv" /></label>
