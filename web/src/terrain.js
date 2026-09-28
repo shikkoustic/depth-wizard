@@ -127,7 +127,7 @@ export function buildTerrain(scene, heights, { photo, maxVerts = 65000, base = 0
     pos[k * 3 + 2] = (r + 0.5) * dy - (H * dy) / 2;
     uv[k * 2] = (c + 0.5) / W; uv[k * 2 + 1] = (r + 0.5) / H;
   }
-  const idx = new Uint32Array((nx - 1) * (nz - 1) * 6);
+  const idx = new Uint16Array((nx - 1) * (nz - 1) * 6);
   let q = 0;
   for (let j = 0; j < nz - 1; j++) for (let i = 0; i < nx - 1; i++) {
     const a = j * nx + i, b = a + 1, c = a + nx, d = c + 1;
