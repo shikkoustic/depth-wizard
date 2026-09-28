@@ -1,5 +1,5 @@
 ﻿import * as THREE from "three";
-import { MapControls } from "three/addons/controls/MapControls.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
 import { loadScene, buildTerrain, setOverlay, slopeDegrees, difference, robustRange, compareStats } from "./terrain.js";
@@ -16,7 +16,7 @@ const scene3 = new THREE.Scene();
 scene3.background = new THREE.Color("#9fb4c8");
 scene3.fog = new THREE.Fog("#9fb4c8", 1e6, 2e6);
 const camera = new THREE.PerspectiveCamera(55, 1, 0.5, 1e6);
-const orbit = new MapControls(camera, canvas);
+const orbit = new OrbitControls(camera, canvas);
 orbit.enableDamping = true; orbit.dampingFactor = 0.08;
 orbit.maxPolarAngle = Math.PI * 0.495;
 const fly = new PointerLockControls(camera, canvas);
