@@ -16,8 +16,8 @@ export async function loadScene(base) {
   photo.colorSpace = THREE.SRGBColorSpace;
   photo.flipY = false;
   photo.anisotropy = 8;
-  photo.generateMipmaps = true;
-  photo.minFilter = THREE.LinearMipmapLinearFilter;
+  photo.generateMipmaps = false;
+  photo.minFilter = THREE.LinearFilter;
   return { meta, layers, photo };
 }
 
