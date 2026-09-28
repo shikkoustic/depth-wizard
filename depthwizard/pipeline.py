@@ -142,10 +142,10 @@ def process(image_path, out_dir, reference=None, dem=None, gcps=None, gsd=None, 
         tr = Affine(work_gsd, 0, 0, 0, -work_gsd, Hg * work_gsd)
 
     progress(f"Resampling to {work_gsd:.2f} m/px ({Wg}×{Hg})")
-    import tempfile
-    _tmp_grid = tempfile.NamedTemporaryFile(suffix='.dat')
+    import os
+    grid_path = os.path.join(out_dir, 'tmp_grid.dat')
     if georef:
-        grid = np.memmap(_tmp_grid.name, dtype=np.uint8, mode='w+', shape=(3, Hg, Wg))
+        grid = np.memmap(grid_path, dtype=np.uint8, mode='w+', shape=(3, Hg, Wg))
         for i in range(3):
             reproject(np.ascontiguousarray(rgb[..., i]), grid[i], src_transform=src_tr, src_crs=src_crs,
                       dst_transform=tr, dst_crs=crs,
