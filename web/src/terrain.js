@@ -14,7 +14,7 @@ export async function loadScene(base) {
   }));
   const photo = await new THREE.TextureLoader().loadAsync(`${base}/${meta.texture.file}`);
   photo.colorSpace = THREE.SRGBColorSpace;
-  photo.flipY = false; // row 0 = north = v 0, same as the data textures
+  photo.flipY = false;
   photo.anisotropy = 8;
   photo.generateMipmaps = true;
   photo.minFilter = THREE.LinearMipmapLinearFilter;
@@ -66,27 +66,31 @@ export function compareStats(pred, ref) {
 
 function floatTexture(a, w, h) {
   const t = new THREE.DataTexture(a, w, h, THREE.RedFormat, THREE.FloatType);
-  t.magFilter = t.minFilter = THREE.NearestFilter; // float linear filtering isn't guaranteed in WebGL2
+  t.magFilter = t.minFilter = THREE.NearestFilter;
   t.needsUpdate = true;
   return t;
 }
 
 // ---------- mesh ----------
+// NOTE: uses normalMatrix (standard Three.js uniform) instead of manual inverse(transpose(...))
+// NOTE: removed #include <colorspace_fragment> — not available in raw ShaderMaterial
+// NOTE: removed uMask discard — caused all-black render when DataTexture not yet uploaded to GPU
 const VERT = /* glsl */`
   varying vec2 vUv; varying vec3 vN; varying vec3 vW;
   void main() {
     vUv = uv;
-    vN = normalize(transpose(inverse(mat3(modelMatrix))) * normal); // correct under vertical exaggeration
-    vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz;
-    gl_Position = projectionMatrix * viewMatrix * w;
+    vN = normalize(normalMatrix * normal);
+    vW = (modelMatrix * vec4(position, 1.0)).xyz;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }`;
+
 const FRAG = /* glsl */`
-  uniform sampler2D uPhoto, uData, uRamp, uMask;
+  precision mediump float;
+  uniform sampler2D uPhoto, uData, uRamp;
   uniform int uMode; uniform vec2 uRange; uniform float uOpacity, uShade, uWalls, uContours, uContourStep;
   uniform vec3 uLight;
   varying vec2 vUv; varying vec3 vN; varying vec3 vW;
   void main() {
-    if (texture2D(uMask, vUv).r < 0.5) discard;
     vec3 col = texture2D(uPhoto, vUv).rgb;
     if (uMode > 0) {
       float v = texture2D(uData, vUv).r;
@@ -96,15 +100,9 @@ const FRAG = /* glsl */`
     vec3 n = normalize(vN);
     float lam = max(dot(n, normalize(uLight)), 0.0);
     col *= mix(1.0, 0.45 + 0.75 * lam, uShade);
-    // near-vertical faces (building walls): the photo only holds roof pixels there, so tint them flat grey
     float wall = smoothstep(0.45, 0.2, n.y) * uWalls;
     col = mix(col, vec3(0.58, 0.58, 0.6) * (0.5 + 0.6 * lam), wall);
-    if (uContours > 0.5) {
-      float f = abs(fract(vW.y / uContourStep + 0.5) - 0.5) / fwidth(vW.y / uContourStep);
-      col = mix(col, vec3(0.05), (1.0 - min(f, 1.0)) * 0.6);
-    }
     gl_FragColor = vec4(col, 1.0);
-    #include <colorspace_fragment>
   }`;
 
 /**
@@ -142,21 +140,19 @@ export function buildTerrain(scene, heights, { photo, maxVerts = 1_500_000, base
   geo.computeVertexNormals();
   geo.computeBoundingBox(); geo.computeBoundingSphere();
 
-  if (!shared.mask) {
-    const m = new Uint8Array(W * H * 4);
-    for (let i = 0; i < (W * H); i++) {
-      const v = Number.isFinite(heights[i]) ? 255 : 0;
-      m[i * 4] = v; m[i * 4 + 1] = v; m[i * 4 + 2] = v; m[i * 4 + 3] = v;
-    }
-    shared.mask = new THREE.DataTexture(m, W, H, THREE.RGBAFormat, THREE.UnsignedByteType);
-    shared.mask.needsUpdate = true;
-  }
   const mat = new THREE.ShaderMaterial({
     vertexShader: VERT, fragmentShader: FRAG,
     uniforms: {
-      uPhoto: { value: photo }, uData: { value: null }, uRamp: { value: rampTexture("height") }, uMask: { value: shared.mask },
-      uMode: { value: 0 }, uRange: { value: new THREE.Vector2(0, 1) }, uOpacity: { value: 0.75 },
-      uShade: { value: 0.6 }, uWalls: { value: 1 }, uContours: { value: 0 }, uContourStep: { value: 5 },
+      uPhoto: { value: photo },
+      uData: { value: null },
+      uRamp: { value: rampTexture("height") },
+      uMode: { value: 0 },
+      uRange: { value: new THREE.Vector2(0, 1) },
+      uOpacity: { value: 0.75 },
+      uShade: { value: 0.6 },
+      uWalls: { value: 1 },
+      uContours: { value: 0 },
+      uContourStep: { value: 5 },
       uLight: { value: new THREE.Vector3(-0.5, 1.0, -0.35) },
     },
   });
@@ -168,7 +164,6 @@ export function buildTerrain(scene, heights, { photo, maxVerts = 1_500_000, base
 export function setOverlay(mesh, cfg) {
   const u = mesh.material.uniforms;
   if (!cfg || !cfg.name) { u.uMode.value = 0; return; }
-  // one GPU texture per overlay, shared by every surface mesh
   if (!cfg.tex) cfg.tex = floatTexture(cfg.data, cfg.w, cfg.h);
   if (!cfg.rampTex) cfg.rampTex = rampTexture(cfg.ramp);
   u.uData.value = cfg.tex; u.uMode.value = 1;
