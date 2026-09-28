@@ -1,4 +1,4 @@
-﻿import * as THREE from "three";
+import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
@@ -21,6 +21,12 @@ orbit.enableDamping = true; orbit.dampingFactor = 0.08;
 orbit.maxPolarAngle = Math.PI * 0.495;
 const fly = new PointerLockControls(camera, canvas);
 const markers = new THREE.Group(); scene3.add(markers);
+// Lights (needed for MeshStandardMaterial)
+scene3.add(new THREE.AmbientLight(0xffffff, 0.7));
+const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+sun.position.set(-0.5, 1.0, -0.35);
+scene3.add(sun);
+
 
 
 const S = { // app state
@@ -157,10 +163,7 @@ function applyOverlay() {
 }
 function applyStyle() {
   for (const m of Object.values(S.meshes)) {
-    const u = m.material.uniforms;
-    u.uOpacity.value = +$("opacity").value; u.uShade.value = $("shade").checked ? 0.6 : 0;
-    u.uWalls.value = $("walls").checked ? 1 : 0; u.uContours.value = $("contours").checked ? 1 : 0;
-    u.uContourStep.value = Math.max(0.5, +$("contour-step").value || 5) * S.exag;
+    const u = m.material.uniforms; if (u) { u.uOpacity.value = +$("opacity").value; u.uShade.value = $("shade").checked ? 0.6 : 0; u.uWalls.value = $("walls").checked ? 1 : 0; u.uContours.value = $("contours").checked ? 1 : 0; u.uContourStep.value = Math.max(0.5, +$("contour-step").value || 5) * S.exag; }
     m.scale.y = S.exag;
   }
   markers.scale.y = S.exag;
