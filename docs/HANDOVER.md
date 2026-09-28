@@ -78,19 +78,56 @@ Full tables, per-site and per-terrain: [RESULTS.md](RESULTS.md).
    Sikkim demo has no ground truth.
 4. **Off-nadir lean.** Tall buildings lean in the imagery; heights land where the roof appears, not the footprint.
 
-## 6. What to do next (ranked, with the reasoning)
+## 6. What needs fixing (open issues, in priority order)
 
-1. **Finish the enlarged datasets and retrain ("v4").** Already built on Kaggle: rural/forest **2,275** tiles
-   (was 1,098) and non-US **1,600** tiles (France 900 + Switzerland 700, the first non-US data in the project).
-   The downtown builder (438 → ~1,700 tiles) still errors and needs a fix. Then one training run on
-   GAMUS + rural + downtown + world, same recipe (`kaggle/train/make_kernels.py`).
-2. **Measure multi-scale inference** (`DEPTHWIZARD_SCALES=0.7,1,1.4`): implemented, not yet scored on the benchmark.
-3. **Feed the coarse DEM into the network** (Copernicus − FABDEM as an extra input channel, Prompt2DEM style):
+1. **`kaggle/naip_urban` dies part-way with `HTTP 403 Forbidden`.** The downtown dataset therefore still has only
+   438 tiles instead of the ~1,700 we configured. Cause: Planetary Computer's storage tokens are fetched once and
+   cached in `_tok` for the whole run, but they expire after roughly an hour, so long runs start failing on blob
+   reads. Fix: re-request the token on 403 (and refresh it every ~40 minutes), then re-run the kernel. The same
+   pattern exists in `kaggle/naip_prep`, which only survives because it finishes in ~12 minutes.
+2. **The "v4" retrain has not run.** Its data is ready and sitting in Kaggle kernel outputs: rural/forest **2,275**
+   tiles and non-US **1,600** tiles (France 900 + Switzerland 700). Once issue 1 is fixed, train one model on
+   GAMUS + rural + downtown + world with the existing recipe:
+   `python kaggle/train/make_kernels.py v4_base model='"Base"' extras='"naip,urban,world"' strat_sampling=True loss_mode='"charb_curriculum"' degrade=True`
+   then score it exactly like the others (`kaggle/bench_run`, `kaggle/eval`) before adopting it.
+3. **`train.py` has no loader for the `world` dataset yet.** The generic extras mechanism expects
+   `<name>_meta.json` + `<name>_rgb.npy` + `<name>_agl.npy`, which `world_prep` already produces, but the
+   combination has never been run end to end — check it on a `smoke=True` run first.
+4. **Multi-scale inference is implemented but unmeasured** (`DEPTHWIZARD_SCALES=0.7,1,1.4`). Score it on the
+   LiDAR benchmark before turning it on by default; it costs one forward pass per scale.
+5. **Model weights do not auto-download.** `depthwizard/model.py` points at a GitHub release URL that does not
+   exist (the repo is private), so everyone must pass `--weights`. Either publish a release or keep shipping the
+   `weights/` folder, as this package does.
+6. **The two bundled scenes were built with `v3a_base`.** If the model changes, rebuild every scene
+   (`kaggle/scenes_run` does it on Kaggle in ~20 min) or the viewer will show stale accuracy numbers.
+7. **The viewer has no automated tests.** `tests/` covers the Python side only (tiling, GCP fit, both pipeline
+   paths); the Three.js front end has been checked by hand.
+8. **Two benchmark sites are excluded automatically** because their reference LiDAR is broken (Boulder: elevations
+   off by ~1,900 m; Nebraska: surface 7 m above its own bare earth). That is correct behaviour, but it means the
+   benchmark is 8 sites, not 10 — worth stating in the deck.
+
+### Data gotchas already hit (don't re-learn these the hard way)
+
+- **`data.geopf.fr` (France) needs easting-first bounding boxes** for EPSG:2154 even in WMS 1.3.0; the documented
+  axis order returns empty tiles with HTTP 200.
+- **Dutch AHN is unusable as-is**: its bare-earth layer is nodata under buildings and dense canopy, so
+  `DSM − DTM` silently deletes exactly the tall structures we want to learn.
+- **Some 3DEP DSM products under-record canopy and roof tops** (7–16 m below bare-earth + height-above-ground).
+  Our reference rule handles it; an independent 1 m canopy map confirmed which side was right.
+- **Pre-2010 LiDAR is often in feet** (Tampa's labels were 3.3× too tall). `naip_urban` now detects and converts,
+  but always sanity-check a new city's tallest building against reality.
+
+## 7. What to do after that (ranked by expected gain)
+
+1. **More tall-building data** — the single biggest remaining error source. Verified-open options beyond the US:
+   New Zealand (LINZ, anonymous S3, pixel-matched surface/terrain pairs) and England (Environment Agency, great
+   tall labels but no open imagery, so label-side only).
+2. **Feed the coarse DEM into the network** (Copernicus − FABDEM as an extra input channel, Prompt2DEM style):
    the most promising fix for forest, where the image alone is ambiguous.
-4. **More tall-building data** (New Zealand and England LiDAR were verified as open; England has great tall
-   labels but no open imagery, so it is a label-side test only).
+3. **Edge sharpening** — predictions are visibly smoother than LiDAR; a guided filter using image edges is cheap
+   to try and easy to measure.
 
-## 7. Rules we kept (worth keeping)
+## 8. Rules we kept (worth keeping)
 
 - **Only measured numbers.** Nothing is quoted unless a script in this repo produced it; `bench/report.py`
   regenerates `RESULTS.md` from the raw JSON in `docs/data/`.
