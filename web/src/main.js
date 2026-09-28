@@ -1,12 +1,12 @@
 ﻿import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { MapControls } from "three/addons/controls/MapControls.js";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
 import { loadScene, buildTerrain, setOverlay, slopeDegrees, difference, robustRange, compareStats } from "./terrain.js";
 import { rampCSS } from "./colormaps.js";
 
 const $ = (id) => document.getElementById(id);
-const fmt = (v, d = 1) => (Number.isFinite(v) ? v.toFixed(d) : "&bull;");
+const fmt = (v, d = 1) => (Number.isFinite(v) ? v.toFixed(d) : "—");
 
 // ---------------- renderer / camera ----------------
 const canvas = $("gl");
@@ -16,18 +16,11 @@ const scene3 = new THREE.Scene();
 scene3.background = new THREE.Color("#9fb4c8");
 scene3.fog = new THREE.Fog("#9fb4c8", 1e6, 2e6);
 const camera = new THREE.PerspectiveCamera(55, 1, 0.5, 1e6);
-const orbit = new OrbitControls(camera, canvas);
+const orbit = new MapControls(camera, canvas);
 orbit.enableDamping = true; orbit.dampingFactor = 0.08;
 orbit.maxPolarAngle = Math.PI * 0.495;
 const fly = new PointerLockControls(camera, canvas);
 const markers = new THREE.Group(); scene3.add(markers);
-// Lights (needed for MeshStandardMaterial)
-scene3.add(new THREE.AmbientLight(0xffffff, 0.7));
-const sun = new THREE.DirectionalLight(0xffffff, 1.0);
-sun.position.set(-0.5, 1.0, -0.35);
-scene3.add(sun);
-
-
 
 const S = { // app state
   data: null, base: 0, exag: 1, meshes: {}, surface: "dsm", overlay: "", derived: {},
@@ -36,19 +29,14 @@ const S = { // app state
 
 function resize() {
   const r = canvas.parentElement.getBoundingClientRect();
-  if (r.width < 10 || r.height < 10) return; // guard against zero-size flash
   renderer.setSize(r.width, r.height, false);
   camera.aspect = r.width / r.height; camera.updateProjectionMatrix();
 }
-window.addEventListener("resize", () => requestAnimationFrame(resize));
-requestAnimationFrame(resize);
-// Re-fire resize after panel transition (sidebar toggle animation)
-setTimeout(resize, 350);
-
+window.addEventListener("resize", resize); resize();
 
 // ---------------- scene loading ----------------
 async function openScene(url) {
-  $("empty").textContent = "Loading scene&bull;¦"; $("empty").hidden = false;
+  $("empty").textContent = "Loading scene…"; $("empty").hidden = false;
   const data = await loadScene(url);
   for (const m of Object.values(S.meshes)) { scene3.remove(m); m.geometry.dispose(); m.material.dispose(); }
   S.meshes = {}; S.derived = {}; S.profilePts = []; markers.clear();
@@ -73,24 +61,24 @@ async function openScene(url) {
   const rel = meta.height_kind === "relative";
   $("scene-info").innerHTML =
     `<span class="badge ${rel ? "rel" : ""}">${rel ? "RELATIVE DSM (no georeference)" : "ABSOLUTE DSM (m)"}</span>\n` +
-    `<b>${meta.title || ""}</b>\n${W} Ã ${H} px &bull;· ${fmt(dx, 2)} m/px &bull;· ${fmt(W * dx / 1000, 2)} Ã ${fmt(H * dy / 1000, 2)} km\n` +
+    `<b>${meta.title || ""}</b>\n${W} × ${H} px · ${fmt(dx, 2)} m/px · ${fmt(W * dx / 1000, 2)} × ${fmt(H * dy / 1000, 2)} km\n` +
     (meta.crs ? `CRS: ${shortCRS(meta.crs)}\n` : "") + (meta.notes || []).join("\n");
   const acc = layers.ref ? compareStats(layers.dsm, layers.ref) : null;
   $("sec-accuracy").hidden = !acc;
   if (acc) {
     $("acc").innerHTML = `<table><tr><td>RMSE</td><td>${fmt(acc.rmse, 2)} m</td></tr><tr><td>MAE</td><td>${fmt(acc.mae, 2)} m</td></tr>` +
-      `<tr><td>Bias (pred &bull; ref)</td><td>${fmt(acc.bias, 2)} m</td></tr><tr><td>Correlation</td><td>${fmt(acc.corr, 3)}</td></tr>` +
+      `<tr><td>Bias (pred − ref)</td><td>${fmt(acc.bias, 2)} m</td></tr><tr><td>Correlation</td><td>${fmt(acc.corr, 3)}</td></tr>` +
       `<tr><td>Pixels compared</td><td>${acc.n.toLocaleString()}</td></tr></table>`;
   }
   if (acc && acc.rmse < 1e-6) {
-    $("acc").innerHTML = "<b>Prediction and reference are identical in this scene</b> &bull; nothing to compare. " +
+    $("acc").innerHTML = "<b>Prediction and reference are identical in this scene</b> — nothing to compare. " +
       "Load a scene processed from an image (with a reference DSM) to see accuracy.";
     $("err-hist").hidden = true; $("err-hist").nextElementSibling.hidden = true;
   } else if (acc) {
     $("err-hist").hidden = false; $("err-hist").nextElementSibling.hidden = false;
     drawHistogram(S.derived.diff);
   }
-  $("downloads").innerHTML = (meta.downloads || []).map((d) => `<a href="${url}/${d.file}" download>${d.label}</a>`).join("") || "&bull;";
+  $("downloads").innerHTML = (meta.downloads || []).map((d) => `<a href="${url}/${d.file}" download>${d.label}</a>`).join("") || "—";
 
   applySurface(); applyOverlay(); applyStyle(); homeView();
   $("empty").hidden = true;
@@ -125,7 +113,7 @@ $("surface").onchange = (e) => { S.surface = e.target.value; applySurface(); };
 $("overlay").onchange = (e) => { S.overlay = e.target.value; applyOverlay(); };
 $("opacity").oninput = applyStyle; $("shade").onchange = applyStyle; $("walls").onchange = applyStyle;
 $("contours").onchange = applyStyle; $("contour-step").oninput = applyStyle;
-$("exag").oninput = (e) => { S.exag = +e.target.value; $("exag-v").textContent = `${S.exag.toFixed(1)}Ã`; applyStyle(); };
+$("exag").oninput = (e) => { S.exag = +e.target.value; $("exag-v").textContent = `${S.exag.toFixed(1)}×`; applyStyle(); };
 $("swipe").onchange = (e) => { S.swipe = e.target.checked; $("swipe-handle").hidden = !S.swipe; placeSwipe(); applySurface(); };
 
 function ensureMesh(k) {
@@ -146,7 +134,7 @@ function applyOverlay() {
   const { meta, layers } = S.data, W = meta.width, H = meta.height;
   const cfg = {
     height: { data: layers.dsm, ramp: "height", range: robustRange(layers.dsm), unit: "m" },
-    slope: { data: S.derived.slope, ramp: "slope", range: [0, 60], unit: "&bull;°" },
+    slope: { data: S.derived.slope, ramp: "slope", range: [0, 60], unit: "°" },
     diff: S.derived.diff && { data: S.derived.diff, ramp: "diff", range: robustRange(S.derived.diff, 0.02, 0.98, true), unit: "m" },
     conf: layers.conf && { data: layers.conf, ramp: "conf", range: robustRange(layers.conf, 0.0, 0.98), unit: "m" },
   }[S.overlay];
@@ -163,7 +151,10 @@ function applyOverlay() {
 }
 function applyStyle() {
   for (const m of Object.values(S.meshes)) {
-    const u = m.material.uniforms; if (u) { u.uOpacity.value = +$("opacity").value; u.uShade.value = $("shade").checked ? 0.6 : 0; u.uWalls.value = $("walls").checked ? 1 : 0; u.uContours.value = $("contours").checked ? 1 : 0; u.uContourStep.value = Math.max(0.5, +$("contour-step").value || 5) * S.exag; }
+    const u = m.material.uniforms;
+    u.uOpacity.value = +$("opacity").value; u.uShade.value = $("shade").checked ? 0.6 : 0;
+    u.uWalls.value = $("walls").checked ? 1 : 0; u.uContours.value = $("contours").checked ? 1 : 0;
+    u.uContourStep.value = Math.max(0.5, +$("contour-step").value || 5) * S.exag;
     m.scale.y = S.exag;
   }
   markers.scale.y = S.exag;
@@ -264,9 +255,9 @@ function probe(p, pt) {
     row(rel ? "Height above ground (relative)" : "DSM height", layers.dsm[p.i]) +
     (layers.ndsm ? row("Above ground (nDSM)", layers.ndsm[p.i]) : "") +
     (layers.dtm ? row("Terrain (DTM)", layers.dtm[p.i]) : "") +
-    (layers.ref ? row("Reference", layers.ref[p.i]) + row("Error (pred &bull; ref)", S.derived.diff[p.i]) : "") +
-    (layers.conf ? row("Uncertainty (&bull;±)", layers.conf[p.i]) : "") +
-    row("Slope", S.derived.slope[p.i], "&bull;°", 1) +
+    (layers.ref ? row("Reference", layers.ref[p.i]) + row("Error (pred − ref)", S.derived.diff[p.i]) : "") +
+    (layers.conf ? row("Uncertainty (±)", layers.conf[p.i]) : "") +
+    row("Slope", S.derived.slope[p.i], "°", 1) +
     (en ? `<tr><td>E / N</td><td>${en[0].toFixed(1)} / ${en[1].toFixed(1)}</td></tr>` : "") +
     `<tr><td>Pixel (row, col)</td><td>${p.r}, ${p.c}</td></tr></table>`;
 }
@@ -299,8 +290,8 @@ function drawProfile(a, b) {
     if (!s) continue; g.strokeStyle = col; g.lineWidth = 1.5; g.beginPath();
     s.forEach((h, k) => { if (Number.isFinite(h)) (k ? g.lineTo : g.moveTo).call(g, X(dist[k]), Y(h)); }); g.stroke();
   }
-  $("probe").innerHTML = `Profile length <b>${D.toFixed(1)} m</b> &bull;· <span style="color:#4fb0c6">prediction</span>` +
-    (series.ref ? ` &bull;· <span style="color:#e39a4f">reference</span>` : "");
+  $("probe").innerHTML = `Profile length <b>${D.toFixed(1)} m</b> · <span style="color:#4fb0c6">prediction</span>` +
+    (series.ref ? ` · <span style="color:#e39a4f">reference</span>` : "");
 }
 
 // ---------------- swipe compare ----------------
@@ -320,7 +311,7 @@ function frame() {
   if (S.data) {
     if (S.nav === "orbit") orbit.update(); else if (S.nav === "fly") updateFly(dt); else updateTour(dt);
     const p = camera.position;
-    $("hud").textContent = `camera ${fmt(p.y / S.exag + S.base, 0)} m &bull;· ground ${fmt(surfaceHeightAt(p.x, p.z) / S.exag + S.base, 0)} m`;
+    $("hud").textContent = `camera ${fmt(p.y / S.exag + S.base, 0)} m · ground ${fmt(surfaceHeightAt(p.x, p.z) / S.exag + S.base, 0)} m`;
     updateCompassAndScale();
   }
   const size = renderer.getSize(new THREE.Vector2());
@@ -348,8 +339,8 @@ async function refreshList(select) {
     for (const s of list) (groups[s.group || "Scenes"] ||= []).push(s);
     const order = ["Your uploads", "India demos (Sentinel-2)", "LiDAR benchmark (USGS 3DEP)", "GAMUS test tiles", "LiDAR reference only"];
     const names = Object.keys(groups).sort((a, b) => (order.indexOf(a) + 99) % 99 - (order.indexOf(b) + 99) % 99);
-    $("scene-select").innerHTML = `<option value="">&bull; choose a processed scene &bull;</option>` +
-      names.map((g) => `<option disabled style="color:var(--accent); font-weight:bold; background:rgba(10,15,30,0.9)"> ${g} </option>` + groups[g].map((s) => `<option value="${s.url}">&nbsp;&nbsp;${s.title}</option>`).join("")).join("");
+    $("scene-select").innerHTML = `<option value="">— choose a processed scene —</option>` +
+      names.map((g) => `<optgroup label="${g}">` + groups[g].map((s) => `<option value="${s.url}">${s.title}</option>`).join("") + `</optgroup>`).join("");
     if (select) $("scene-select").value = select;
     return list;
   } catch { /* static hosting without API */ }
@@ -370,7 +361,7 @@ async function uploadFile(f) {
   const fd = new FormData(); fd.append("image", f);
   for (const [id, key] of [["upload-ref", "reference"], ["upload-dem", "dem"], ["upload-gcp", "gcps"]]) if ($(id).files[0]) fd.append(key, $(id).files[0]);
   if ($("upload-gsd").value) fd.append("gsd", $("upload-gsd").value);
-  status(`Uploading ${f.name}&bull;¦`);
+  status(`Uploading ${f.name}…`);
   try {
     const job = await (await fetch("./api/jobs", { method: "POST", body: fd })).json();
     if (job.error) throw new Error(job.error);
@@ -430,8 +421,8 @@ canvas.addEventListener("pointermove", (e) => {
     const p = hit && pixelAt(hit.point.x, hit.point.z), el = $("cursor-read");
     if (!p) { el.style.display = "none"; return; }
     const L = S.data.layers, rel = S.data.meta.height_kind === "relative";
-    el.textContent = `${rel ? "h" : "DSM"} ${fmt(L.dsm[p.i])} m` + (L.ndsm && !rel ? ` &bull;· above ground ${fmt(L.ndsm[p.i])} m` : "") +
-      (L.ref ? ` &bull;· ref ${fmt(L.ref[p.i])} m` : "") + ` &bull;· slope ${fmt(S.derived.slope[p.i], 0)}&bull;°`;
+    el.textContent = `${rel ? "h" : "DSM"} ${fmt(L.dsm[p.i])} m` + (L.ndsm && !rel ? ` · above ground ${fmt(L.ndsm[p.i])} m` : "") +
+      (L.ref ? ` · ref ${fmt(L.ref[p.i])} m` : "") + ` · slope ${fmt(S.derived.slope[p.i], 0)}°`;
     el.style.display = "block";
     const x = e.clientX - rect.left, flip = x + el.offsetWidth + 24 > rect.width;
     el.style.left = `${flip ? x - el.offsetWidth - 24 : x}px`; el.style.top = `${e.clientY - rect.top}px`;
@@ -461,8 +452,8 @@ function toggleRecord() {
   const chunks = [], mime = ["video/webm;codecs=vp9", "video/webm", "video/mp4"].find((m) => MediaRecorder.isTypeSupported(m));
   recorder = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 8e6 });
   recorder.ondataavailable = (e) => chunks.push(e.data);
-  recorder.onstop = () => { download(new Blob(chunks, { type: mime }), `${sceneName()}_flythrough.${mime.includes("mp4") ? "mp4" : "webm"}`); recorder = null; $("btn-rec").classList.remove("rec"); $("btn-rec").textContent = "&bull; REC"; };
-  recorder.start(); $("btn-rec").classList.add("rec"); $("btn-rec").textContent = "&bull;  STOP";
+  recorder.onstop = () => { download(new Blob(chunks, { type: mime }), `${sceneName()}_flythrough.${mime.includes("mp4") ? "mp4" : "webm"}`); recorder = null; $("btn-rec").classList.remove("rec"); $("btn-rec").textContent = "● REC"; };
+  recorder.start(); $("btn-rec").classList.add("rec"); $("btn-rec").textContent = "■ STOP";
 }
 function exportGLB() {
   const src = S.meshes[S.surface] || S.meshes.dsm; if (!src) return;
@@ -478,12 +469,3 @@ $("btn-rec").onclick = () => S.data && toggleRecord();
 $("btn-glb").onclick = () => S.data && exportGLB();
 $("btn-help").onclick = () => { $("shortcuts").hidden = !$("shortcuts").hidden; };
 $("shortcuts").onclick = () => { $("shortcuts").hidden = true; };
-
-// &bull;&bull; Sidebar toggle &bull;&bull;
-$("sidebar-toggle").onclick = () => {
-  const panel = $("panel");
-  const isCollapsed = panel.classList.toggle("collapsed");
-  $("sidebar-toggle").textContent = isCollapsed ? "&bull;¶" : "&bull;";
-  $("sidebar-toggle").title = isCollapsed ? "Expand sidebar" : "Collapse sidebar";
-  setTimeout(() => requestAnimationFrame(resize), 320);
-};
