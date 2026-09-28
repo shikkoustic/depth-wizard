@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DepthWizard — SIH26175</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- ── Left Glass Panel ── -->
+    <aside id="panel">
+      <header>
+        <h1>DepthWizard</h1>
+        <p class="sub">Single-view satellite image → DSM → 3D flythrough &nbsp;·&nbsp; SIH26175</p>
+      </header>
+
+      <!-- Scene Input -->
+      <section id="sec-input">
+        <h2>Scene</h2>
+        <select id="scene-select"><option value="">— choose a processed scene —</option></select>
+        <label class="upload" style="margin-top:8px">
+          <input type="file" id="upload" accept=".tif,.tiff,.png,.jpg,.jpeg" />
+          <div style="font-size:22px;margin-bottom:4px">🛰️</div>
+          <span>Upload image (GeoTIFF / PNG / JPG)</span>
+          <div style="font-size:10px;margin-top:4px;color:var(--accent)">Drag & drop supported</div>
+        </label>
+        <details id="upload-opts">
+          <summary>⚙️ Advanced options</summary>
+          <label>Reference DSM (optional GeoTIFF) <input type="file" id="upload-ref" accept=".tif,.tiff" /></label>
+          <label>Terrain DEM override (optional GeoTIFF) <input type="file" id="upload-dem" accept=".tif,.tiff" /></label>
+          <label>Ground-control points CSV (x,y,z) <input type="file" id="upload-gcp" accept=".csv" /></label>
+          <label>Pixel size, metres (PNG/JPG only) <input type="number" id="upload-gsd" step="0.05" placeholder="auto" /></label>
+        </details>
+        <div id="job-status" class="status"></div>
+        <div id="job-bar" hidden><div></div></div>
+        <div id="scene-info" class="info"></div>
+      </section>
+
+      <!-- View Controls -->
+      <section id="sec-view">
+        <h2>View Controls</h2>
+        <div class="seg" id="nav-mode">
+          <button data-v="orbit" class="on">🌐 Orbit</button>
+          <button data-v="fly">✈️ Fly</button>
+          <button data-v="tour">🎥 Tour</button>
+        </div>
+        <label>Surface <select id="surface"></select></label>
+        <label>Overlay
+          <select id="overlay">
+            <option value="">📷 Photo only</option>
+            <option value="height">📊 Height map</option>
+            <option value="slope">📐 Slope (°)</option>
+            <option value="diff">⚡ Error vs reference</option>
+            <option value="conf">🎯 Uncertainty (± m)</option>
+          </select>
+        </label>
+        <div id="legend"><div class="bar"></div><div class="ticks"><span></span><span></span><span></span></div></div>
+        <label>Overlay opacity <input type="range" id="opacity" min="0" max="1" step="0.05" value="0.75" /></label>
+        <label>Vertical exaggeration <span id="exag-v" style="color:var(--accent);font-weight:600">1.0×</span>
+          <input type="range" id="exag" min="0.5" max="5" step="0.1" value="1" />
+        </label>
+        <label class="chk"><input type="checkbox" id="shade" checked /> 🌄 Hill-shading</label>
+        <label class="chk"><input type="checkbox" id="walls" checked /> 🏛️ Grey walls on steep faces</label>
+        <label class="chk"><input type="checkbox" id="contours" /> 🗺️ Contours every
+          <input type="number" id="contour-step" value="5" min="0.5" step="0.5" /> m
+        </label>
+        <label class="chk"><input type="checkbox" id="swipe" /> ↔️ Swipe: prediction | reference</label>
+      </section>
+
+      <!-- Measure Tools -->
+      <section id="sec-tools">
+        <h2>Measure</h2>
+        <div class="seg" id="tool">
+          <button data-v="probe" class="on">📍 Probe</button>
+          <button data-v="profile">📈 Profile</button>
+        </div>
+        <div id="probe" class="info">Click the terrain to read height and slope.</div>
+        <canvas id="profile-chart" width="300" height="150" hidden></canvas>
+      </section>
+
+      <!-- Accuracy -->
+      <section id="sec-accuracy" hidden>
+        <h2>Accuracy vs Reference</h2>
+        <div id="acc" class="info"></div>
+        <canvas id="err-hist" width="300" height="110"></canvas>
+        <div class="info" style="margin-top:4px">Error histogram (prediction − reference, m)</div>
+      </section>
+
+      <!-- Downloads -->
+      <section id="sec-export">
+        <h2>Download</h2>
+        <div id="downloads" class="info">—</div>
+      </section>
+
+      <!-- Footer badge -->
+      <div style="margin-top:16px;text-align:center">
+        <span class="badge">MAE 1.41 m · RMSE 3.10 m · r = 0.905</span>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px">GAMUS · NAIP · 3DEP LiDAR fine-tuned</div>
+      </div>
+    </aside>
+
+    <!-- ── Sidebar Toggle Button ── -->
+    <button id="sidebar-toggle" title="Collapse sidebar">◀</button>
+
+    <!-- ── 3D Stage ── -->
+    <main id="stage">
+      <canvas id="gl"></canvas>
+
+      <!-- Swipe divider (LiDAR wipe bar) -->
+      <div id="swipe-handle" hidden></div>
+
+      <!-- Top-left toolbar -->
+      <div id="toolbar">
+        <button id="btn-home" title="Reset view (H)">⌂ Home</button>
+        <button id="btn-shot" title="Save screenshot (P)">📷 PNG</button>
+        <button id="btn-rec" title="Record flythrough (R)">⏺ REC</button>
+        <button id="btn-glb" title="Export 3D model (.glb)">📦 3D</button>
+        <button id="btn-help" title="Keyboard shortcuts (?)">? Help</button>
+      </div>
+
+      <!-- Top-right HUD -->
+      <div id="hud"></div>
+
+      <!-- Compass rose -->
+      <div id="compass" title="North">
+        <svg viewBox="-20 -20 40 40">
+          <circle r="18"/>
+          <path d="M0,-15 L5,2 L0,-2 L-5,2 Z" class="n"/>
+          <path d="M0,15 L5,-2 L0,2 L-5,-2 Z" class="s"/>
+          <text y="-7" dy="-9">N</text>
+        </svg>
+      </div>
+
+      <!-- Scale bar -->
+      <div id="scalebar"><div class="bar"></div><span></span></div>
+
+      <!-- Cursor readout -->
+      <div id="cursor-read"></div>
+
+      <!-- Keyboard shortcuts modal -->
+      <div id="shortcuts" hidden>
+        <h3>⌨️ Keyboard & Mouse</h3>
+        <table>
+          <tr><td>Orbit</td><td>left-drag pan · right-drag rotate · wheel zoom</td></tr>
+          <tr><td>Fly</td><td>click to capture · WASD move · Q/E down/up · Shift fast · Esc release</td></tr>
+          <tr><td>1 / 2 / 3</td><td>Orbit / Fly / Tour mode</td></tr>
+          <tr><td>H</td><td>Reset camera to home view</td></tr>
+          <tr><td>O</td><td>Cycle overlays</td></tr>
+          <tr><td>+ / −</td><td>Vertical exaggeration</td></tr>
+          <tr><td>P / R</td><td>Screenshot / Record video</td></tr>
+          <tr><td>?</td><td>Toggle this help</td></tr>
+        </table>
+        <p>Click terrain to read height, slope & coordinates. Profile: click two points on terrain.</p>
+      </div>
+
+      <!-- Help ribbon -->
+      <div id="help">Orbit: left-drag pan · right-drag rotate · wheel zoom &nbsp;|&nbsp; Fly: WASD · Q/E · Shift &nbsp;|&nbsp; ? shortcuts</div>
+
+      <!-- Empty state -->
+      <div id="empty">
+        <div>
+          <b>DepthWizard</b><br>
+          Choose a processed scene on the left, or upload a satellite image<br>
+          <span style="font-size:12px;color:var(--muted)">GeoTIFF → absolute DSM &nbsp;·&nbsp; PNG/JPG → relative DSM</span>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

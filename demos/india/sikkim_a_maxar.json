@@ -1,0 +1,20 @@
+{
+ "name": "sikkim_a",
+ "bbox": [
+  88.365,
+  27.163,
+  88.385,
+  27.18
+ ],
+ "source": "Maxar Open Data Program (CC BY-NC 4.0), event India-Floods-Oct-2023",
+ "item": "45/120220211231/1040010073381800",
+ "gsd": 0.37,
+ "date": "2022-03-14",
+ "crs": "EPSG:32645",
+ "shape": [
+  3,
+  6242,
+  6561
+ ],
+ "filled": 0.9999994872265947
+}
