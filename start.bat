@@ -16,6 +16,6 @@ pip install numpy rasterio pillow fastapi uvicorn python-multipart torch transfo
 
 echo Starting API Server and 3D Visualization Platform...
 start http://127.0.0.1:8000
-python -m depthwizard --data runs 
+python -m depthwizard --data runs --weights weights/best.pt 
 
 pause
