@@ -140,30 +140,24 @@ export function buildTerrain(scene, heights, { photo, maxVerts = 65000, base = 0
   geo.computeVertexNormals();
   geo.computeBoundingBox(); geo.computeBoundingSphere();
 
-  const mat = new THREE.MeshStandardMaterial({
-    map: photo,
-    roughness: 0.9,
-    metalness: 0.0,
-    side: THREE.DoubleSide,
+  const mat = new THREE.ShaderMaterial({
+    vertexShader: VERT, fragmentShader: FRAG,
+    uniforms: {
+      uPhoto: { value: photo },
+      uData: { value: null },
+      uRamp: { value: rampTexture("height") },
+      uMode: { value: 0 },
+      uRange: { value: new THREE.Vector2(0, 1) },
+      uOpacity: { value: 0.75 },
+      uShade: { value: 0.6 },
+      uWalls: { value: 1 },
+      uContours: { value: 0 },
+      uContourStep: { value: 5 },
+      uLight: { value: new THREE.Vector3(-0.5, 1.0, -0.35) },
+    },
   });
   const mesh = new THREE.Mesh(geo, mat);
-  // Add ambient + directional light to scene if not already there
-  if (!shared._litScene) {
-    shared._litScene = true;
-    const amb = new THREE.AmbientLight(0xffffff, 0.6);
-    amb.name = "_dw_amb";
-    const dir = new THREE.DirectionalLight(0xffffff, 1.0);
-    dir.position.set(-0.5, 1.0, -0.35);
-    dir.name = "_dw_dir";
-    // Attach lights to the mesh's parent scene after it's added
-    mesh.onAfterRender = function(renderer, scene) {
-      if (!scene.getObjectByName("_dw_amb")) {
-        scene.add(amb); scene.add(dir);
-      }
-      mesh.onAfterRender = null; // only do this once
-    };
-  }
-  mesh.userData = { stride: s, nx, nz, _basic: true };
+  mesh.userData = { stride: s, nx, nz };
   return mesh;
 }
 
