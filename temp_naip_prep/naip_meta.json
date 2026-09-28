@@ -1,0 +1,17 @@
+{
+ "n": 0,
+ "gsd": 0.66,
+ "size": 512,
+ "items": [],
+ "rejected": {
+  "error": 327,
+  "LiDAR DTM off FABDEM by 2546 m": 1,
+  "LiDAR DTM off FABDEM by 453 m": 1,
+  "dsm/dtm/hag grids differ": 2,
+  "no overlap with FABDEM": 1
+ },
+ "split": [],
+ "tiles": [],
+ "agl_mean": NaN,
+ "runtime_min": 13.995019320646922
+}

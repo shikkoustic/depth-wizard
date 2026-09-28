@@ -1,0 +1,17 @@
+[{"stream_name":"stdout","time":455.471593713,"data":"[   7.5m] candidate LiDAR tiles 441 after 182 searches\n"}
+,{"stream_name":"stdout","time":842.896257006,"data":"[  14.0m] tiles 0 from 0 LiDAR tiles; rejected: {'error': 327, 'LiDAR DTM off FABDEM by 2546 m': 1, 'LiDAR DTM off FABDEM by 453 m': 1, 'dsm/dtm/hag grids differ': 2, 'no overlap with FABDEM': 1}\n"}
+,{"stream_name":"stderr","time":843.989531596,"data":"Traceback (most recent call last):\n"}
+,{"stream_name":"stderr","time":843.989711429,"data":"  File \"/kaggle/src/script.py\", line 183, in \u003cmodule\u003e\n"}
+,{"stream_name":"stderr","time":843.989742783,"data":"    ax[r, 2 * c].imshow(X[i]); ax[r, 2 * c].set_title(f\"{tiles[i][2]['lat']:.2f},{tiles[i][2]['lon']:.2f}\")\n"}
+,{"stream_name":"stderr","time":843.989750414,"data":"                        ~^^^\n"}
+,{"stream_name":"stderr","time":843.98975618,"data":"  File \"/usr/local/lib/python3.12/dist-packages/numpy/_core/memmap.py\", line 348, in __getitem__\n"}
+,{"stream_name":"stderr","time":843.992056956,"data":"    res = super().__getitem__(index)\n"}
+,{"stream_name":"stderr","time":843.992105119,"data":"          ^^^^^^^^^^^^^^^^^^^^^^^^^^\n"}
+,{"stream_name":"stderr","time":843.992111821,"data":"IndexError: index 0 is out of bounds for axis 0 with size 0\n"}
+,{"stream_name":"stderr","time":847.636998689,"data":"/usr/local/lib/python3.12/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\\|'\n"}
+,{"stream_name":"stderr","time":847.637048747,"data":"  cells[i][c] = re.sub('\\\\\\\\\\|', '|', cell)\n"}
+,{"stream_name":"stderr","time":848.132855604,"data":"/usr/local/lib/python3.12/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\\_'\n"}
+,{"stream_name":"stderr","time":848.132898426,"data":"  text = re.sub(r'_', '\\_', text) # Escape underscores in display text\n"}
+,{"stream_name":"stderr","time":850.503826819,"data":"[NbConvertApp] Converting notebook __script__.ipynb to html\n"}
+,{"stream_name":"stderr","time":852.532801358,"data":"[NbConvertApp] Writing 351525 bytes to __results__.html\n"}
+]

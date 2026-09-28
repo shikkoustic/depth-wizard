@@ -40,12 +40,11 @@ def post(url, body):
 def get(url): return _retry(lambda: json.load(urllib.request.urlopen(url, timeout=120)))
 _tok = {}
 def sign(href):
-    acct, cont = href.split("//")[1].split(".")[0], href.split("blob.core.windows.net/")[1].split("/")[0]
+    c = "naip" if "/naip/" in href else ("3dep-lidar-dsm" if "-dsm/" in href else ("3dep-lidar-dtm" if "-dtm/" in href else "3dep-lidar-hag"))
     now = time.time()
-    if (acct, cont) not in _tok or now - _tok[(acct, cont)][1] > 2400:
-        token = get(f"https://planetarycomputer.microsoft.com/api/sas/v1/token/{acct}/{cont}")["token"]
-        _tok[(acct, cont)] = (token, now)
-    return f"{href}?{_tok[(acct, cont)][0]}"
+    if c not in _tok or now - _tok[c][1] > 2400:
+        _tok[c] = (get(f"https://planetarycomputer.microsoft.com/api/sas/v1/token/{c}")["token"], now)
+    return f"{href}?{_tok[c][0]}"
 
 def near_bench(bb):
     cx, cy = (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2
