@@ -20,6 +20,13 @@ from app.models.uncertainty import UncertaintyEstimator
 
 class TestDepthWizardPipeline(unittest.TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        from app.processing.generate_samples import generate_benchmark_samples
+        sample_dir = os.path.join(BASE_DIR, "sample_data")
+        if not os.path.exists(os.path.join(sample_dir, "sample_urban_georef.tif")):
+            generate_benchmark_samples(sample_dir)
+
     def setUp(self):
         self.test_h, self.test_w = 64, 64
         # Synthetic RGB test tile

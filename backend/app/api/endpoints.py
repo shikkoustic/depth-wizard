@@ -95,6 +95,16 @@ def list_sample_datasets():
                     "filename": f,
                     "is_georeferenced": f.endswith(".tif")
                 })
+    # If no authentic presets found (e.g. fresh clone/test run), fall back to any available samples
+    if not samples and os.path.exists(SAMPLE_DIR):
+        for f in os.listdir(SAMPLE_DIR):
+            if f.endswith("_georef.tif") or f.endswith("_rgb.jpg"):
+                samples.append({
+                    "id": f,
+                    "name": f.replace("_", " ").replace(".tif", "").replace(".jpg", "").title(),
+                    "filename": f,
+                    "is_georeferenced": f.endswith(".tif")
+                })
     samples.sort(key=lambda x: 0 if "San Francisco" in x["name"] else 1)
     return {"samples": samples}
 
